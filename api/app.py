@@ -14,7 +14,7 @@ adtiam.load_creds('adt-db')
 cnxn_supabase = create_client(adtiam.creds['db']['supabase']['url'], adtiam.creds['db']['supabase']['key-admin'])
 
 
-app = FastAPI(title="Oryx Forge ")
+app = FastAPI(title="Oryx Forge API")
 
 # Enable CORS
 app.add_middleware(
@@ -48,16 +48,9 @@ def read_root():
     """
     A simple root endpoint that returns a greeting.
     """
-    return {"message": "Hello from FastAPI on Cloud Run!"}
+    return {"message": "Oryx Forge API"}
 
-@app.get("/hello/{name}")
-def say_hello(name: str):
-    """
-    An endpoint that greets a specific name.
-    """
-    return {"message": f"Hello, {name}!"}
-
-@app.get("/env")
+@app.get("/$env")
 def get_environment_variable():
     """
     An endpoint to return all environment variables as a dictionary.
@@ -80,9 +73,17 @@ from pydantic import BaseModel
 class PromptRequest(BaseModel):
     prompt: str
 
-class FilePreviewRequest(BaseModel):
-    fileid: str
-    # settings: dict
+class BaseFileRequest(BaseModel):
+    user_owner: str
+    project_id: str
+    data_source_id: str
+
+class FilePreviewRequest(BaseFileRequest):
+    pass
+
+class FileImportRequest(BaseFileRequest):
+    settings_load: dict
+    settings_save: dict
 
 @app.post("/llm")
 def get_llm_stream(request: PromptRequest):
@@ -141,15 +142,46 @@ def dataframe_to_spreadsheet_format(df):
 @app.post("/files/preview")
 def preview_file(request: FilePreviewRequest):
     """
-    Preview a file from Supabase storage based on fileid.
+    Preview a file from Supabase storage based on data_source_id.
     Downloads the file, reads it with pandas, and returns preview data.
     """
-    # Create file service instance
-    file_service = FileService(cnxn_supabase)
+    # Create file service instance with common parameters
+    file_service = FileService(cnxn_supabase, request.user_owner, request.project_id, request.data_source_id)
     
-    # Use service to preview file - let exceptions bubble up to FastAPI
-    preview_data = file_service.preview_file(request.fileid)
+    # Use service to preview data source - let exceptions bubble up to FastAPI
+    preview_data = file_service.preview_data_source()
     preview_data = {k: dataframe_to_spreadsheet_format(df) for k, df in preview_data.items()}
 
     return preview_data
+
+
+@app.post("/files/import")
+def import_file(request: FileImportRequest):
+    """
+    Import a file from Supabase storage to Google Cloud Storage and create records.
+    Downloads the file, processes selected sheets, saves to GCS, and creates/updates Supabase records.
+    """
+    # Create file service instance with common parameters
+    file_service = FileService(cnxn_supabase, request.user_owner, request.project_id, request.data_source_id)
+    
+    # Extract settings
+    settings_save = request.settings_save
+    create_new_dataset = settings_save.get("createNewDataset", False)
+    dataset_name = settings_save.get("datasetName") if create_new_dataset else None
+    
+    if not create_new_dataset and dataset_name is None:
+        raise HTTPException(status_code=400, detail="Dataset name is required when not creating a new dataset")
+    
+    selected_sheets = settings_save.get("selectedSheets", {})
+    
+    if not selected_sheets:
+        raise HTTPException(status_code=400, detail="No sheets selected for import")
+    
+    # Use service to import file
+    result = file_service.import_file(
+        selected_sheets=selected_sheets,
+        dataset_name=dataset_name
+    )
+    
+    return result
 

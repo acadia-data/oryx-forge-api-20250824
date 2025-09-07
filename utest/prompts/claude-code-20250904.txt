@@ -1,0 +1,8 @@
+claude -p "show the top 10 rows of data/df_card_m.csv" \
+  --allowedTools "Bash,Write" \
+  --permission-mode acceptEdits \
+
+# need permission-mode acceptEdits else it doesn't do anything and allowedTools write
+claude -p "calculate the year on year growth in transacted value in data/df_card_m.csv, grouped by merchant" \
+  --allowedTools "Bash,Write" \
+  --permission-mode acceptEdits

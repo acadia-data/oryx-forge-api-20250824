@@ -1,6 +1,9 @@
 import ast
 from pathlib import Path
 import textwrap
+import keyword
+import re
+from loguru import logger
 
 
 class TaskService:
@@ -46,20 +49,126 @@ class TaskService:
                 else:
                     tree.body.insert(0, ast.Import(names=[ast.alias(name=mod, asname=None)]))
 
-    def _find_class(self, tree, name: str):
+    def _find_class(self, tree, task: str):
         for node in tree.body:
-            if isinstance(node, ast.ClassDef) and node.name == name:
+            if isinstance(node, ast.ClassDef) and node.name == task:
                 return node
         return None
 
-    def _generate_class_source(self, name: str, code: str, dependencies: list[str]) -> str:
+    def _sanitize_module_name(self, module: str) -> str:
+        """Auto-sanitize to valid module name (snake_case)."""
+        if not module or not str(module).strip():
+            return "default_module"
+        
+        module = str(module).strip()
+        
+        # Convert camelCase/PascalCase to snake_case
+        module = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', module)
+        # Replace spaces, hyphens, dots with underscores
+        module = re.sub(r'[\s\-\.]+', '_', module)
+        # Keep only alphanumeric and underscores
+        module = re.sub(r'[^a-zA-Z0-9_]', '', module)
+        # Convert to lowercase
+        module = module.lower()
+        # Remove consecutive underscores
+        module = re.sub(r'_{2,}', '_', module)
+        # Remove leading/trailing underscores
+        module = module.strip('_')
+        
+        # Handle edge cases
+        if not module or module.isdigit():
+            module = "module_" + module if module else "default_module"
+        elif module[0].isdigit():
+            module = "m_" + module
+        
+        # Handle Python keywords
+        if keyword.iskeyword(module):
+            module += "_mod"
+        
+        # Length limit
+        if len(module) > 50:
+            module = module[:47] + "_mod"
+        
+        return module
+
+    def _sanitize_task_name(self, task: str) -> str:
+        """Auto-sanitize to valid class name (PascalCase)."""
+        if not task or not str(task).strip():
+            return "DefaultTask"
+        
+        task = str(task).strip()
+        
+        # Split on common separators
+        words = re.split(r'[^a-zA-Z0-9]+', task)
+        # Filter out empty strings and pure numbers
+        words = [w for w in words if w and not w.isdigit()]
+        
+        if not words:
+            return "DefaultTask"
+        
+        # Convert to PascalCase
+        sanitized = ''.join(word.capitalize() for word in words)
+        
+        # Ensure starts with letter
+        if sanitized[0].isdigit():
+            sanitized = "Task" + sanitized
+        
+        # Handle Python keywords
+        if keyword.iskeyword(sanitized.lower()):
+            sanitized += "Task"
+        
+        # Length limit
+        if len(sanitized) > 50:
+            sanitized = sanitized[:46] + "Task"
+        
+        return sanitized
+
+    def _sanitize_dependencies(self, dependencies: list[str]) -> list[str]:
+        """Auto-clean dependency task names."""
+        if not dependencies:
+            return []
+        
+        clean_deps = []
+        changes = []
+        
+        for dep in dependencies:
+            clean_dep = self._sanitize_task_name(dep)
+            clean_deps.append(clean_dep)
+            if dep != clean_dep:
+                changes.append(f"'{dep}' -> '{clean_dep}'")
+        
+        if changes:
+            logger.info(f"Auto-cleaned dependencies: {', '.join(changes)}")
+        
+        return clean_deps
+
+    def _auto_clean_names(self, module: str, task: str) -> tuple[str, str]:
+        """Auto-clean both module and task names, log changes."""
+        original_module, original_task = module, task
+        
+        clean_module = self._sanitize_module_name(module)
+        clean_task = self._sanitize_task_name(task)
+        
+        # Log changes if any
+        changes = []
+        if original_module != clean_module:
+            changes.append(f"module: '{original_module}' -> '{clean_module}'")
+        if original_task != clean_task:
+            changes.append(f"task: '{original_task}' -> '{clean_task}'")
+        
+        if changes:
+            logger.info(f"Auto-cleaned: {', '.join(changes)}")
+        
+        return clean_module, clean_task
+
+    def _generate_class_source(self, task: str, code: str, dependencies: list[str]) -> str:
         """Generate source code for a task class."""
         decorator_str = ""
         if dependencies:
             deps_str = ", ".join(dependencies)
             decorator_str = f"@d6tflow.requires({deps_str})\n"
         
-        class_source = f"""{decorator_str}class {name}(d6tflow.tasks.PandasPq):
+        class_source = f"""{decorator_str}class {task}(d6tflow.tasks.PandasPq):
     def run(self):
 {textwrap.indent(code, '        ')}"""
         return class_source
@@ -68,6 +177,8 @@ class TaskService:
 
     def create(self, module: str, task: str, code: str, dependencies: list[str]):
         """Create a new task class (fails if already exists)."""
+        module, task = self._auto_clean_names(module, task)
+        dependencies = self._sanitize_dependencies(dependencies)
         filename = self.get_filename(module)
         
         # Load existing file or create new tree
@@ -86,10 +197,12 @@ class TaskService:
         
         tree.body.append(class_def)
         self._save_file(filename, tree)
-        print(f"✅ Created {task} in {module}")
+        logger.success(f"Created {task} in {module}")
 
     def upsert(self, module: str, task: str, code: str, dependencies: list[str]):
         """Create a new task class or update if it already exists (upsert)."""
+        module, task = self._auto_clean_names(module, task)
+        dependencies = self._sanitize_dependencies(dependencies)
         filename = self.get_filename(module)
         
         # Load existing file or create new tree
@@ -111,10 +224,11 @@ class TaskService:
             
             tree.body.append(class_def)
             self._save_file(filename, tree)
-            print(f"✅ Created {task} in {module}")
+            logger.success(f"Created {task} in {module}")
 
-    def read(self, module: str, task: str) -> str:
-        """Return the source code for a given class."""
+    def read(self, module: str, task: str, method_only: bool = True) -> str:
+        """Return the source code for a given class or just run() method body."""
+        module, task = self._auto_clean_names(module, task)
         filename = self.get_filename(module)
         
         if not filename.exists():
@@ -124,6 +238,18 @@ class TaskService:
         cls = self._find_class(tree, task)
         if not cls:
             raise ValueError(f"Class {task} not found in {module}")
+        
+        if method_only:
+            # Find and return just run() method body
+            for node in cls.body:
+                if isinstance(node, ast.FunctionDef) and node.name == "run":
+                    # Return the method body as properly formatted code
+                    body_code = []
+                    for stmt in node.body:
+                        body_code.append(ast.unparse(stmt))
+                    return '\n'.join(body_code)
+            raise ValueError(f"run() method not found in {task}")
+        
         return ast.unparse(cls)
 
     def update(
@@ -138,6 +264,9 @@ class TaskService:
         - new_code: replace run() method body
         - new_dependencies: replace @d6tflow.requires(...)
         """
+        module, task = self._auto_clean_names(module, task)
+        if new_dependencies is not None:
+            new_dependencies = self._sanitize_dependencies(new_dependencies)
         filename = self.get_filename(module)
         
         if not filename.exists():
@@ -183,10 +312,11 @@ class TaskService:
                 cls.decorator_list.insert(0, decorator_ast)
 
         self._save_file(filename, tree)
-        print(f"✅ Updated {task} in {module}")
+        logger.success(f"Updated {task} in {module}")
 
     def delete(self, module: str, task: str):
-        """Delete a class definition by name."""
+        """Delete a class definition by task name."""
+        module, task = self._auto_clean_names(module, task)
         filename = self.get_filename(module)
         
         if not filename.exists():
@@ -202,10 +332,13 @@ class TaskService:
             raise ValueError(f"Class {task} not found in {module}")
         tree.body = new_body
         self._save_file(filename, tree)
-        print(f"✅ Deleted {task} from {module}")
+        logger.success(f"Deleted {task} from {module}")
 
     def list_tasks(self, module: str):
         """List all defined task class names in a specific module file."""
+        module = self._sanitize_module_name(module)
+        if module != str(module).strip():
+            logger.info(f"Auto-cleaned module: '{str(module).strip()}' -> '{module}'")
         filename = self.get_filename(module)
         
         if not filename.exists():
@@ -230,6 +363,10 @@ class TaskService:
 
     def list_tasks_by_module(self, module: str):
         """List all task classes in a given module using AST parsing."""
+        original_module = module
+        module = self._sanitize_module_name(module)
+        if original_module != module:
+            logger.info(f"Auto-cleaned module: '{original_module}' -> '{module}'")
         filename = self.get_filename(module)
         
         if not filename.exists():
@@ -238,8 +375,26 @@ class TaskService:
         tree = ast.parse(filename.read_text())
         return [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
 
-    def rename(self, module: str, old_task: str, new_task: str):
+    def rename_task(self, module: str, old_task: str, new_task: str):
         """Rename a task class and update dependency references."""
+        original_module, original_old_task, original_new_task = module, old_task, new_task
+        
+        module = self._sanitize_module_name(module)
+        old_task = self._sanitize_task_name(old_task)
+        new_task = self._sanitize_task_name(new_task)
+        
+        # Log changes
+        changes = []
+        if original_module != module:
+            changes.append(f"module: '{original_module}' -> '{module}'")
+        if original_old_task != old_task:
+            changes.append(f"old task: '{original_old_task}' -> '{old_task}'")
+        if original_new_task != new_task:
+            changes.append(f"new task: '{original_new_task}' -> '{new_task}'")
+        
+        if changes:
+            logger.info(f"Auto-cleaned: {', '.join(changes)}")
+        
         filename = self.get_filename(module)
         
         if not filename.exists():
@@ -269,7 +424,7 @@ class TaskService:
                                 dec.args[i] = ast.Name(new_task, ast.Load())
 
         self._save_file(filename, tree)
-        print(f"✅ Renamed {old_task} → {new_task} in {module} and updated dependencies")
+        logger.success(f"Renamed {old_task} -> {new_task} in {module} and updated dependencies")
 
     # ---------- Internal ----------
 

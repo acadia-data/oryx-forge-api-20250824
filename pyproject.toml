@@ -4,20 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oryxforge"
-version = "0.1.0"
+version = "25.9.8"
 description = "Task management and workflow orchestration library with MCP support"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "OryxForge Team", email = "team@oryxforge.dev"},
+    {name = "Oryx Intelligence LLC", email = "dev@oryxintel.com"},
 ]
 maintainers = [
-    {name = "OryxForge Team", email = "team@oryxforge.dev"},
+    {name = "Oryx Intelligence LLC", email = "dev@oryxintel.com"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -75,7 +74,7 @@ dev = [
 
 # All optional dependencies
 all = [
-    "oryxforge[mcp-server,dev]",
+    "oryxforge[cli,mcp-server]",
 ]
 
 [project.scripts]

@@ -14,45 +14,45 @@ mcp = FastMCP("OryxForge")
 
 
 @mcp.tool
-def create_task(module: str, task: str, code: str, dependencies: list[str] = None) -> str:
+def create_task(task: str, code: str, module: str = None, inputs: list[str] = None) -> str:
     """Create a new task class in the specified module."""
-    if dependencies is None:
-        dependencies = []
-    svc.create(module, task, code, dependencies)
-    return f"Created task {task} in module {module}"
+    if inputs is None:
+        inputs = []
+    svc.create(task, code, module, inputs)
+    return f"Created task {task} in module {module if module else 'tasks/__init__.py'}"
 
 
 @mcp.tool
-def read_task(module: str, task: str) -> str:
+def read_task(task: str, module: str = None) -> str:
     """Read the source code of a task class."""
-    return svc.read(module, task)
+    return svc.read(task, module)
 
 
 @mcp.tool
-def update_task(module: str, task: str, new_code: str = None, new_dependencies: list[str] = None) -> str:
+def update_task(task: str, module: str = None, new_code: str = None, new_inputs: list[str] = None) -> str:
     """Update an existing task class."""
-    svc.update(module, task, new_code, new_dependencies)
-    return f"Updated task {task} in module {module}"
+    svc.update(task, module, new_code, new_inputs)
+    return f"Updated task {task} in module {module if module else 'tasks/__init__.py'}"
 
 
 @mcp.tool
-def delete_task(module: str, task: str) -> str:
+def delete_task(task: str, module: str = None) -> str:
     """Delete a task class from a module."""
-    svc.delete(module, task)
-    return f"Deleted task {task} from module {module}"
+    svc.delete(task, module)
+    return f"Deleted task {task} from module {module if module else 'tasks/__init__.py'}"
 
 
 @mcp.tool
-def upsert_task(module: str, task: str, code: str, dependencies: list[str] = None) -> str:
+def upsert_task(task: str, code: str, module: str = None, inputs: list[str] = None) -> str:
     """Create a new task class or update if it already exists."""
-    if dependencies is None:
-        dependencies = []
-    svc.upsert(module, task, code, dependencies)
-    return f"Upserted task {task} in module {module}"
+    if inputs is None:
+        inputs = []
+    svc.upsert(task, code, module, inputs)
+    return f"Upserted task {task} in module {module if module else 'tasks/__init__.py'}"
 
 
 @mcp.tool
-def list_tasks(module: str) -> list[str]:
+def list_tasks(module: str = None) -> list[str]:
     """List all task classes in a specific module."""
     return svc.list_tasks(module)
 
@@ -64,16 +64,16 @@ def list_modules() -> list[str]:
 
 
 @mcp.tool
-def list_tasks_by_module(module: str) -> list[str]:
+def list_tasks_by_module(module: str = None) -> list[str]:
     """List all task classes in a given module."""
     return svc.list_tasks_by_module(module)
 
 
 @mcp.tool
-def rename_task(module: str, old_task: str, new_task: str) -> str:
-    """Rename a task class and update dependency references."""
-    svc.rename(module, old_task, new_task)
-    return f"Renamed task {old_task} to {new_task} in module {module}"
+def rename_task(old_task: str, new_task: str, module: str = None) -> str:
+    """Rename a task class and update input references."""
+    svc.rename_task(old_task, new_task, module)
+    return f"Renamed task {old_task} to {new_task} in module {module if module else 'tasks/__init__.py'}"
 
 
 @mcp.tool

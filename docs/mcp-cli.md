@@ -76,16 +76,19 @@ Total: 13 tools
 ## Claude setup
 
 ```bash
-claude mcp add oryxforge -- oryxforge mcp serve --protocol
+claude mcp add oryx -- oryxforge mcp serve
 claude mcp remove oryxforge
 claude mcp remove mcp_server
 claude mcp remove OryxForge
 
+fastmcp run mcp_server.py
 fastmcp install claude-code mcp_server
 fastmcp install claude-code mcp_oryxforge.py
-fastmcp install claude-code orxyforge.tools.mcp_oryxforge.py:oryxforge2
 
 claude --debug
+npx @modelcontextprotocol/inspector oryxforge mcp serve
+
+
 
 ```
 

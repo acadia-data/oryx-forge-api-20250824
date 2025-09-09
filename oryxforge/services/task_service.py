@@ -3,6 +3,8 @@ from pathlib import Path
 import textwrap
 import keyword
 import re
+import subprocess
+import tempfile
 from loguru import logger
 
 
@@ -31,25 +33,67 @@ class TaskService:
         if not init_file.exists():
             init_file.write_text("")
 
+    def _parse_imports_string(self, imports_str: str) -> list[str]:
+        """Parse import string into individual import statements. Keep it simple for now."""
+        if not imports_str or not imports_str.strip():
+            return []
+        
+        imports = []
+        for line in imports_str.strip().split('\n'):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            imports.append(line)
+                    
+        return imports
+
+    def _get_existing_imports(self, tree) -> dict[str, str | None]:
+        """Get existing imports as {module: alias} dict."""
+        existing = {}
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    existing[alias.name] = alias.asname
+        return existing
+    
+    def _merge_imports(self, tree, new_imports_str: str):
+        """Merge new imports with existing ones in the AST tree."""
+        if not new_imports_str:
+            return
+            
+        # Get existing imports as strings for simple comparison
+        existing_import_strings = set()
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                existing_import_strings.add(ast.unparse(node))
+        
+        new_imports = self._parse_imports_string(new_imports_str)
+        
+        # Find the position after the last import statement
+        last_import_index = 0
+        for i, node in enumerate(tree.body):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                last_import_index = i + 1
+        
+        # Add new imports that don't already exist
+        for import_str in new_imports:
+            if import_str not in existing_import_strings:
+                # Parse the import string and create AST node
+                try:
+                    import_ast = ast.parse(import_str).body[0]
+                    # Insert after the last existing import
+                    tree.body.insert(last_import_index, import_ast)
+                    last_import_index += 1  # Update position for next import
+                    logger.info(f"Added import: {import_str}")
+                except SyntaxError:
+                    logger.error(f"Invalid import syntax: {import_str}")
+            else:
+                logger.debug(f"Import already exists: {import_str}")
+
     def _ensure_imports(self, tree):
         """Ensure required imports are present in the given AST tree."""
-        needed_imports = [
-            ("d6tflow", None),
-            ("pandas", "pd"),
-        ]
-        existing_imports = {
-            n.names[0].name if isinstance(n, ast.Import) else n.module
-            for n in tree.body
-            if isinstance(n, (ast.Import, ast.ImportFrom))
-        }
-        for mod, alias in needed_imports:
-            if mod not in existing_imports:
-                if alias:
-                    tree.body.insert(
-                        0, ast.Import(names=[ast.alias(name=mod, asname=alias)])
-                    )
-                else:
-                    tree.body.insert(0, ast.Import(names=[ast.alias(name=mod, asname=None)]))
+        needed_imports_str = "import d6tflow\nimport pandas as pd"
+        self._merge_imports(tree, needed_imports_str)
 
     def _find_class(self, tree, task: str):
         for node in tree.body:
@@ -211,7 +255,7 @@ class TaskService:
 
     # ---------- CRUD Methods ----------
 
-    def create(self, task: str, code: str, module: str = None, inputs: list[str] = None):
+    def create(self, task: str, code: str, module: str = None, inputs: list[str] = None, imports: str = None):
         """Create a new task class (fails if already exists)."""
         module, task, filename = self._prepare_task_operation(module, task)
         inputs = self._sanitize_inputs(inputs or [])
@@ -221,7 +265,13 @@ class TaskService:
             tree = ast.parse(filename.read_text())
         else:
             tree = ast.parse("")
-            self._ensure_imports(tree)
+        
+        # Ensure base imports first
+        self._ensure_imports(tree)
+        
+        # Add custom imports if provided
+        if imports:
+            self._merge_imports(tree, imports)
         
         if self._find_class(tree, task):
             raise ValueError(f"Class {task} already exists in {module}")
@@ -232,33 +282,24 @@ class TaskService:
         
         tree.body.append(class_def)
         self._save_file(filename, tree)
-        logger.success(f"Created {task} in {self._get_module_display(module)}")
+        status_msg = f"Created {task} in {self._get_module_display(module)}"
+        logger.success(status_msg)
+        return status_msg
 
-    def upsert(self, task: str, code: str, module: str = None, inputs: list[str] = None):
+    def upsert(self, task: str, code: str, module: str = None, inputs: list[str] = None, imports: str = None):
         """Create a new task class or update if it already exists (upsert)."""
         module, task, filename = self._prepare_task_operation(module, task)
-        inputs = self._sanitize_inputs(inputs or [])
         
-        # Load existing file or create new tree
+        # Check if task already exists
         if filename.exists():
             tree = ast.parse(filename.read_text())
-        else:
-            tree = ast.parse("")
-            self._ensure_imports(tree)
+            existing_class = self._find_class(tree, task)
+            if existing_class:
+                # Update existing class
+                return self.update(task, module=module, new_code=code, new_inputs=inputs, new_imports=imports)
         
-        existing_class = self._find_class(tree, task)
-        if existing_class:
-            # Update existing class
-            self.update(task, module=module, new_code=code, new_inputs=inputs)
-        else:
-            # Create new class
-            class_source = self._generate_class_source(task, code, inputs)
-            class_ast = ast.parse(class_source)
-            class_def = class_ast.body[0]
-            
-            tree.body.append(class_def)
-            self._save_file(filename, tree)
-            logger.success(f"Created {task} in {self._get_module_display(module)}")
+        # Create new class
+        return self.create(task, code, module=module, inputs=inputs, imports=imports)
 
     def read(self, task: str, module: str = None, method_only: bool = True) -> str:
         """Return the source code for a given class or just run() method body."""
@@ -291,11 +332,13 @@ class TaskService:
         module: str = None,
         new_code: str = None,
         new_inputs: list[str] = None,
+        new_imports: str = None,
     ):
         """
         Update an existing class.
         - new_code: replace run() method body
         - new_inputs: replace @d6tflow.requires(...)
+        - new_imports: add new imports to the file
         """
         module, task, filename = self._prepare_task_operation(module, task)
         if new_inputs is not None:
@@ -308,6 +351,10 @@ class TaskService:
         cls = self._find_class(tree, task)
         if not cls:
             raise ValueError(f"Class {task} not found in {self._get_module_display(module)}")
+
+        # Add new imports if provided
+        if new_imports:
+            self._merge_imports(tree, new_imports)
 
         if new_code:
             for node in cls.body:
@@ -344,7 +391,9 @@ class TaskService:
                 cls.decorator_list.insert(0, decorator_ast)
 
         self._save_file(filename, tree)
-        logger.success(f"Updated {task} in {self._get_module_display(module)}")
+        status_msg = f"Updated {task} in {self._get_module_display(module)}"
+        logger.success(status_msg)
+        return status_msg
 
     def delete(self, task: str, module: str = None):
         """Delete a class definition by task name."""
@@ -466,6 +515,174 @@ class TaskService:
 
         self._save_file(filename, tree)
         logger.success(f"Renamed {old_task} -> {new_task} in {self._get_module_display(module)} and updated dependencies")
+
+    # ---------- Flow Execution ----------
+
+    def preview_flow(self, task: str, module: str = None, 
+                    flow_params: dict = None, reset_tasks: list[str] = None) -> str:
+        """Generate and execute a preview script for a d6tflow workflow."""
+        script = self.create_preview(task, module, flow_params, reset_tasks)
+        return self.execute_preview(script)
+
+    def create_run(self, task: str, module: str = None,
+                  flow_params: dict = None, reset_tasks: list[str] = None) -> str:
+        """Generate a run script for a d6tflow workflow."""
+        return self._generate_flow_script(task, module, flow_params, reset_tasks, preview_only=False)
+
+    def create_preview(self, task: str, module: str = None, 
+                      flow_params: dict = None, reset_tasks: list[str] = None) -> str:
+        """Generate a preview script for a d6tflow workflow."""
+        return self._generate_flow_script(task, module, flow_params, reset_tasks, preview_only=True)
+
+    def execute_run(self, script: str) -> str:
+        """Execute a run script using subprocess."""
+        return self._execute_script(script)
+
+    def execute_preview(self, script: str) -> str:
+        """Execute a preview script using subprocess."""
+        return self._execute_script(script)
+
+    def _validate_flow_task(self, task: str, module: str) -> tuple[str, str]:
+        """Internal method to validate flow task exists."""
+        # Reuse existing validation
+        module, task, _ = self._prepare_task_operation(module, task)
+        
+        # Validate that the target task exists
+        if module is None:
+            available_tasks = self.list_tasks()
+        else:
+            available_tasks = self.list_tasks(module)
+        
+        if task not in available_tasks:
+            raise ValueError(f"Task {task} not found in {self._get_module_display(module)}")
+        
+        return module, task
+
+    def _validate_reset_tasks(self, reset_tasks: list[str], target_module: str) -> list[str]:
+        """Validate that reset tasks exist and return sanitized names."""
+        if not reset_tasks:
+            return []
+        
+        validated_tasks = []
+        for reset_task in reset_tasks:
+            # Sanitize task name
+            clean_task = self._sanitize_task_name(reset_task)
+            
+            # Check if task exists in the target module
+            if target_module is None:
+                # Check in default module (tasks/__init__.py)
+                available_tasks = self.list_tasks()
+            else:
+                # Check in specific module
+                available_tasks = self.list_tasks(target_module)
+            
+            if clean_task not in available_tasks:
+                logger.warning(f"Reset task '{reset_task}' (cleaned: '{clean_task}') not found in {self._get_module_display(target_module)}")
+                # Continue anyway - d6tflow will handle the error
+            
+            validated_tasks.append(clean_task)
+        
+        return validated_tasks
+
+    def _generate_flow_script(self, task: str, module: str, flow_params: dict, reset_tasks: list[str], preview_only: bool = False) -> str:
+        """Generate the flow_run.py script content using string manipulation."""
+        # Validate task exists
+        module, task = self._validate_flow_task(task, module)
+        
+        # Validate reset_tasks exist
+        reset_tasks = self._validate_reset_tasks(reset_tasks or [], module)
+        
+        # Import section
+        if module is None:
+            import_line = "import tasks"
+            task_ref = f"tasks.{task}"
+        else:
+            import_line = f"import tasks.{module} as tasks"  
+            task_ref = f"tasks.{task}"
+        
+        # Parameters section
+        params_str = repr(flow_params or {})
+        
+        # Reset section
+        reset_lines = []
+        for reset_task in (reset_tasks or []):
+            reset_lines.append(f"flow.reset(tasks.{reset_task})")
+        reset_section = "\n".join(reset_lines)
+        
+        # Action section
+        action = "flow.preview()" if preview_only else "flow.run()"
+
+        # Generate complete script with path fix
+        script = f"""import sys
+import os
+sys.path.insert(0, os.getcwd())
+
+import d6tflow
+{import_line}
+
+# Parameters
+params = {params_str}
+
+# Target task
+task = {task_ref}
+
+# Create workflow
+flow = d6tflow.Workflow(task=task, params=params)
+
+# Reset tasks
+{reset_section}
+
+# Execute
+{action}
+"""
+        
+        logger.debug(f"Generated flow script:\n{script}")
+        return script
+
+    def _execute_script(self, script: str) -> str:
+        """Execute the generated Python script and return output."""
+        try:
+            # Create temporary script file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(script)
+                script_path = f.name
+            
+            # Execute script using subprocess
+            result = subprocess.run(
+                ['python', script_path],
+                cwd=str(self.base_dir),
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            
+            # Clean up temporary file
+            Path(script_path).unlink()
+            
+            # Process results
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                if result.stderr.strip():
+                    output += f"\n\nWarnings/Info:\n{result.stderr.strip()}"
+                logger.success("Flow execution completed successfully")
+                return output
+            else:
+                error_msg = f"Flow execution failed with return code {result.returncode}\n"
+                if result.stdout.strip():
+                    error_msg += f"stdout: {result.stdout.strip()}\n"
+                if result.stderr.strip():
+                    error_msg += f"stderr: {result.stderr.strip()}"
+                logger.error(error_msg)
+                return error_msg
+                
+        except subprocess.TimeoutExpired:
+            error_msg = "Flow execution timed out after 5 minutes"
+            logger.error(error_msg)
+            return error_msg
+        except Exception as e:
+            error_msg = f"Error executing flow script: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
 
     # ---------- Internal ----------
 

@@ -204,26 +204,31 @@ class FileService:
         
         return response.data[0]['id']
     
-    def create_datasheet_record(self, dataset_id: str, datasheet_name: str, gcs_path: str) -> str:
+    def create_datasheet_record(self, dataset_id: str, datasheet_name: str, uri: str = None) -> str:
         """
         Create a new datasheet record in Supabase.
         
         Args:
             dataset_id: The dataset ID
             datasheet_name: The name of the datasheet
-            gcs_path: The GCS path where the data is stored
+            uri: The URI where the data is stored (optional)
             
         Returns:
             The created datasheet ID
         """
+        datasheet_data = {
+            "name": datasheet_name,
+            "user_owner": self.user_owner,
+            "dataset_id": dataset_id
+        }
+        
+        # Add URI if provided
+        if uri:
+            datasheet_data["uri"] = uri
+        
         response = (
             self.supabase_client.table("datasheets")
-            .insert({
-                "name": datasheet_name,
-                "user_owner": self.user_owner,
-                "dataset_id": dataset_id,
-                "gcs_path": gcs_path
-            })
+            .insert(datasheet_data)
             .execute()
         )
         
@@ -322,7 +327,7 @@ class FileService:
                 # Save to GCS
                 gcs_path = self.save_dataframe_to_gcs(df, self.project_id, dataset_id, datasheet_name)
                 
-                # Create datasheet record
+                # Create datasheet record with URI
                 datasheet_id = self.create_datasheet_record(dataset_id, datasheet_name, gcs_path)
                 datasheet_ids[datasheet_name] = datasheet_id
             

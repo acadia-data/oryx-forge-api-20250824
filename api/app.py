@@ -43,6 +43,7 @@ async def general_exception_handler(request, exc):
     """Handle general exceptions and return 500 status with error details."""
     raise HTTPException(status_code=500, detail=f"Internal server error: {str(exc)}")
 
+
 @app.get("/")
 def read_root():
     """
@@ -176,6 +177,24 @@ def import_file(request: FileImportRequest):
     
     if not selected_sheets:
         raise HTTPException(status_code=400, detail="No sheets selected for import")
+    
+    if create_new_dataset:
+        # Check if dataset already exists
+        existing_response = cnxn_supabase.table("datasets").select("id").eq(
+            "name", dataset_name
+        ).eq("user_owner", request.user_owner).eq(
+            "project_id", request.project_id
+        ).execute()
+        
+        if existing_response.data:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "Dataset already exists",
+                    "dataset_id": existing_response.data[0]['id'],
+                    "message": f"Dataset '{dataset_name}' already exists for this user and project"
+                }
+            )
     
     # Use service to import file
     result = file_service.import_file(

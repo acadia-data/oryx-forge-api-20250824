@@ -13,6 +13,7 @@ user_owner, project_id = response.data[0]['user_owner'], response.data[0]['proje
 
 base_url = "http://localhost:8000"
 base_url = "http://127.0.0.1:8000"
+# base_url = "https://oryx-forge-dev-20250823-846392806260.us-central1.run.app"
 
 # Test Preview
 print("Testing Preview...")
@@ -25,6 +26,8 @@ print(f"Preview: {preview_response.status_code}")
 if preview_response.is_success:
     data = preview_response.json()
     print(f"Found {len(data)} sheets")
+else:
+    print(f"Error: {preview_response.text}")
 
 # Test Import
 print("\nTesting Import...")
@@ -43,3 +46,5 @@ print(f"Import: {import_response.status_code}")
 if import_response.is_success:
     result = import_response.json()
     print(f"Created dataset: {result.get('dataset_id')}")
+else:
+    print(f"Error: {import_response.text}")

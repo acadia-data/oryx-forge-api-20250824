@@ -1,84 +1,84 @@
-"""MCP tools for TaskService CRUD operations."""
+"""MCP tools for WorkflowService CRUD operations."""
 
 import os
 from pathlib import Path
 from typing import Any
 from mcp.server.fastmcp import FastMCP
-from oryxforge.services.task_service import TaskService
+from oryxforge.services.workflow_service import WorkflowService
 
-# Initialize the task service with current working directory
-svc = TaskService(base_dir=str(Path.cwd()))
+# Initialize the workflow service with current working directory
+svc = WorkflowService(base_dir=str(Path.cwd()))
 
 # Create FastMCP instance
 mcp = FastMCP("OryxForge")
 
 
 @mcp.tool
-def create_task(module: str, task: str, code: str, dependencies: list[str] = None) -> str:
-    """Create a new task class in the specified module."""
+def create_sheet(dataset: str, sheet: str, code: str, dependencies: list[str] = None) -> str:
+    """Create a new sheet class in the specified dataset."""
     if dependencies is None:
         dependencies = []
-    svc.create(module, task, code, dependencies)
-    return f"Created task {task} in module {module}"
+    svc.create(sheet, code, dataset, dependencies)
+    return f"Created sheet {sheet} in dataset {dataset}"
 
 
 @mcp.tool
-def read_task(module: str, task: str) -> str:
-    """Read the source code of a task class."""
-    return svc.read(module, task)
+def read_sheet(dataset: str, sheet: str) -> str:
+    """Read the source code of a sheet class."""
+    return svc.read(sheet, dataset)
 
 
 @mcp.tool
-def update_task(module: str, task: str, new_code: str = None, new_dependencies: list[str] = None) -> str:
-    """Update an existing task class."""
-    svc.update(module, task, new_code, new_dependencies)
-    return f"Updated task {task} in module {module}"
+def update_sheet(dataset: str, sheet: str, new_code: str = None, new_dependencies: list[str] = None) -> str:
+    """Update an existing sheet class."""
+    svc.update(sheet, dataset, new_code, new_dependencies)
+    return f"Updated sheet {sheet} in dataset {dataset}"
 
 
 @mcp.tool
-def delete_task(module: str, task: str) -> str:
-    """Delete a task class from a module."""
-    svc.delete(module, task)
-    return f"Deleted task {task} from module {module}"
+def delete_sheet(dataset: str, sheet: str) -> str:
+    """Delete a sheet class from a dataset."""
+    svc.delete(sheet, dataset)
+    return f"Deleted sheet {sheet} from dataset {dataset}"
 
 
 @mcp.tool
-def upsert_task(module: str, task: str, code: str, dependencies: list[str] = None) -> str:
-    """Create a new task class or update if it already exists."""
+def upsert_sheet(dataset: str, sheet: str, code: str, dependencies: list[str] = None) -> str:
+    """Create a new sheet class or update if it already exists."""
     if dependencies is None:
         dependencies = []
-    svc.upsert(module, task, code, dependencies)
-    return f"Upserted task {task} in module {module}"
+    svc.upsert(sheet, code, dataset, dependencies)
+    return f"Upserted sheet {sheet} in dataset {dataset}"
 
 
 @mcp.tool
-def list_tasks(module: str) -> list[str]:
-    """List all task classes in a specific module."""
-    return svc.list_tasks(module)
+def list_sheets(dataset: str) -> list[str]:
+    """List all sheet classes in a specific dataset."""
+    return svc.list_sheets(dataset)
 
 
 @mcp.tool
-def list_modules() -> list[str]:
-    """List all available task modules."""
-    return svc.list_modules()
+def list_datasets() -> list[str]:
+    """List all available datasets."""
+    return svc.list_datasets()
 
 
 @mcp.tool
-def list_tasks_by_module(module: str) -> list[str]:
-    """List all task classes in a given module."""
-    return svc.list_tasks_by_module(module)
+def list_sheets_by_dataset(dataset: str) -> list[str]:
+    """List all sheet classes in a given dataset."""
+    return svc.list_sheets_by_dataset(dataset)
 
 
 @mcp.tool
-def rename_task(module: str, old_task: str, new_task: str) -> str:
-    """Rename a task class and update dependency references."""
-    svc.rename(module, old_task, new_task)
-    return f"Renamed task {old_task} to {new_task} in module {module}"
+def rename_sheet(dataset: str, old_sheet: str, new_sheet: str) -> str:
+    """Rename a sheet class and update dependency references."""
+    svc.rename_sheet(old_sheet, new_sheet, dataset)
+    return f"Renamed sheet {old_sheet} to {new_sheet} in dataset {dataset}"
 
 
 @mcp.tool
 def get_working_directory() -> str:
-    """Get the current working directory of the task service."""
+    """Get the current working directory of the workflow service."""
     return str(svc.base_dir)
 
 
@@ -90,7 +90,7 @@ def get_tasks_directory() -> str:
 
 @mcp.tool
 def change_working_directory(path: str) -> str:
-    """Change the working directory for the task service."""
+    """Change the working directory for the workflow service."""
     global svc
     try:
         # Expand user path and make absolute
@@ -106,8 +106,8 @@ def change_working_directory(path: str) -> str:
         # Change OS working directory
         os.chdir(new_path)
         
-        # Reinitialize the task service with the new directory
-        svc = TaskService(base_dir=str(new_path))
+        # Reinitialize the workflow service with the new directory
+        svc = WorkflowService(base_dir=str(new_path))
         
         return f"Changed working directory to: {new_path}"
     

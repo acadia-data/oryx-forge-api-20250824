@@ -11,7 +11,7 @@ pip install oryxforge[mcp-server]
 ```
 
 This installs:
-- `oryxforge` - Core library with TaskService
+- `oryxforge` - Core library with WorkflowService
 - `click` - CLI framework
 - `mcp-server` - MCP server dependencies
 
@@ -191,7 +191,7 @@ Get current working directory.
 Get the tasks directory path.
 
 #### `change_working_directory(path)`
-Change working directory and reinitialize TaskService.
+Change working directory and reinitialize WorkflowService.
 
 **Examples:**
 ```python

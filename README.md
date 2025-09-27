@@ -4,7 +4,7 @@ Task management and workflow orchestration library with MCP support.
 
 ## Features
 
-- **TaskService**: Dynamic task creation and management using AST manipulation
+- **WorkflowService**: Dynamic task creation and management using AST manipulation
 - **MCP Integration**: Model Context Protocol tools for remote task management
 - **CLI Interface**: Command-line tools for task orchestration
 - **d6tflow Compatible**: Generated tasks work seamlessly with d6tflow
@@ -33,13 +33,13 @@ pip install oryxforge[dev]
 
 ## Quick Start
 
-### Using TaskService Directly
+### Using WorkflowService Directly
 
 ```python
-from oryxforge import TaskService
+from oryxforge import WorkflowService
 
 # Create service
-svc = TaskService()
+svc = WorkflowService()
 
 # Create a task
 svc.create(

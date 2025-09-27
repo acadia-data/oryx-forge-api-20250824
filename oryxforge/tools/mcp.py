@@ -1,81 +1,81 @@
-"""MCP tools for TaskService CRUD operations."""
+"""MCP tools for WorkflowService CRUD operations."""
 
 import os
 from pathlib import Path
 from typing import Any, Optional
 from fastmcp import FastMCP
-from oryxforge.services.task_service import TaskService
+from oryxforge.services.workflow_service import WorkflowService
 
-# Initialize the task service with current working directory
-svc = TaskService(base_dir=str(Path.cwd()))
+# Initialize the workflow service with current working directory
+svc = WorkflowService(base_dir=str(Path.cwd()))
 
 # Create FastMCP instance
 mcp = FastMCP("OryxForge")
 
 
 @mcp.tool
-def create_task(task: str, code: str, module: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
-    """Create a new task class in the specified module."""
+def create_sheet(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
+    """Create a new sheet class in the specified dataset."""
     if inputs is None:
         inputs = []
-    return svc.create(task, code, module, inputs, imports)
+    return svc.create(sheet, code, dataset, inputs, imports)
 
 
 @mcp.tool
-def read_task(task: str, module: Optional[str] = None) -> str:
-    """Read the source code of a task class."""
-    return svc.read(task, module)
+def read_sheet(sheet: str, dataset: Optional[str] = None) -> str:
+    """Read the source code of a sheet class."""
+    return svc.read(sheet, dataset)
 
 
 @mcp.tool
-def update_task(task: str, module: Optional[str] = None, new_code: Optional[str] = None, new_inputs: Optional[list[str]] = None, new_imports: Optional[str] = None) -> str:
-    """Update an existing task class."""
-    return svc.update(task, module, new_code, new_inputs, new_imports)
+def update_sheet(sheet: str, dataset: Optional[str] = None, new_code: Optional[str] = None, new_inputs: Optional[list[str]] = None, new_imports: Optional[str] = None) -> str:
+    """Update an existing sheet class."""
+    return svc.update(sheet, dataset, new_code, new_inputs, new_imports)
 
 
 @mcp.tool
-def delete_task(task: str, module: Optional[str] = None) -> str:
-    """Delete a task class from a module."""
-    svc.delete(task, module)
-    return f"Deleted task {task} from module {module if module else 'tasks/__init__.py'}"
+def delete_sheet(sheet: str, dataset: Optional[str] = None) -> str:
+    """Delete a sheet class from a dataset."""
+    svc.delete(sheet, dataset)
+    return f"Deleted sheet {sheet} from dataset {dataset if dataset else 'tasks/__init__.py'}"
 
 
 @mcp.tool
-def upsert_task(task: str, code: str, module: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
-    """Create a new task class or update if it already exists."""
+def upsert_sheet(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
+    """Create a new sheet class or update if it already exists."""
     if inputs is None:
         inputs = []
-    return svc.upsert(task, code, module, inputs, imports)
+    return svc.upsert(sheet, code, dataset, inputs, imports)
 
 
 @mcp.tool
-def list_tasks(module: Optional[str] = None) -> list[str]:
-    """List all task classes in a specific module."""
-    return svc.list_tasks(module)
+def list_sheets(dataset: Optional[str] = None) -> list[str]:
+    """List all sheet classes in a specific dataset."""
+    return svc.list_sheets(dataset)
 
 
 @mcp.tool
-def list_modules() -> list[str]:
-    """List all available task modules."""
-    return svc.list_modules()
+def list_datasets() -> list[str]:
+    """List all available datasets."""
+    return svc.list_datasets()
 
 
 @mcp.tool
-def list_tasks_by_module(module: Optional[str] = None) -> list[str]:
-    """List all task classes in a given module."""
-    return svc.list_tasks_by_module(module)
+def list_sheets_by_dataset(dataset: Optional[str] = None) -> list[str]:
+    """List all sheet classes in a given dataset."""
+    return svc.list_sheets_by_dataset(dataset)
 
 
 @mcp.tool
-def rename_task(old_task: str, new_task: str, module: Optional[str] = None) -> str:
-    """Rename a task class and update input references."""
-    svc.rename_task(old_task, new_task, module)
-    return f"Renamed task {old_task} to {new_task} in module {module if module else 'tasks/__init__.py'}"
+def rename_sheet(old_sheet: str, new_sheet: str, dataset: Optional[str] = None) -> str:
+    """Rename a sheet class and update input references."""
+    svc.rename_sheet(old_sheet, new_sheet, dataset)
+    return f"Renamed sheet {old_sheet} to {new_sheet} in dataset {dataset if dataset else 'tasks/__init__.py'}"
 
 
 @mcp.tool
 def get_working_directory() -> str:
-    """Get the current working directory of the task service."""
+    """Get the current working directory of the workflow service."""
     return str(svc.base_dir)
 
 
@@ -87,7 +87,7 @@ def get_tasks_directory() -> str:
 
 @mcp.tool
 def change_working_directory(path: str) -> str:
-    """Change the working directory for the task service."""
+    """Change the working directory for the workflow service."""
     global svc
     try:
         # Expand user path and make absolute
@@ -103,8 +103,8 @@ def change_working_directory(path: str) -> str:
         # Change OS working directory
         os.chdir(new_path)
         
-        # Reinitialize the task service with the new directory
-        svc = TaskService(base_dir=str(new_path))
+        # Reinitialize the workflow service with the new directory
+        svc = WorkflowService(base_dir=str(new_path))
         
         return f"Changed working directory to: {new_path}"
     
@@ -141,19 +141,19 @@ def list_directory(path: Optional[str] = ".") -> list[str]:
 
 
 @mcp.tool
-def create_run(task: str, module: Optional[str] = None,
+def create_run(sheet: str, dataset: Optional[str] = None,
               flow_params: Optional[dict] = None,
-              reset_tasks: Optional[list[str]] = None) -> str:
+              reset_sheets: Optional[list[str]] = None) -> str:
     """Generate a run script for a d6tflow workflow."""
-    return svc.create_run(task, module, flow_params, reset_tasks)
+    return svc.create_run(sheet, dataset, flow_params, reset_sheets)
 
 
 @mcp.tool
-def create_preview(task: str, module: Optional[str] = None, 
-                  flow_params: Optional[dict] = None, 
-                  reset_tasks: Optional[list[str]] = None) -> str:
+def create_preview(sheet: str, dataset: Optional[str] = None,
+                  flow_params: Optional[dict] = None,
+                  reset_sheets: Optional[list[str]] = None) -> str:
     """Generate a preview script for a d6tflow workflow."""
-    return svc.create_preview(task, module, flow_params, reset_tasks)
+    return svc.create_preview(sheet, dataset, flow_params, reset_sheets)
 
 
 @mcp.tool
@@ -169,8 +169,8 @@ def execute_preview(script: str) -> str:
 
 
 @mcp.tool
-def preview_flow(task: str, module: Optional[str] = None, 
-                flow_params: Optional[dict] = None, 
-                reset_tasks: Optional[list[str]] = None) -> str:
+def preview_flow(sheet: str, dataset: Optional[str] = None,
+                flow_params: Optional[dict] = None,
+                reset_sheets: Optional[list[str]] = None) -> str:
     """Generate and execute a preview script for a d6tflow workflow."""
-    return svc.preview_flow(task, module, flow_params, reset_tasks)
+    return svc.preview_flow(sheet, dataset, flow_params, reset_sheets)

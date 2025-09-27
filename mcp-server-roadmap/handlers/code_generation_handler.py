@@ -13,10 +13,10 @@ from mcp.types import Tool, TextContent
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
-    from oryxforge.services.task_service import TaskService
+    from oryxforge.services.workflow_service import WorkflowService
 except ImportError:
     # Fallback for when oryxforge is not available
-    TaskService = None
+    WorkflowService = None
 
 class CodeGenerationHandler:
     """Handles code generation using OryxForge library."""
@@ -25,8 +25,8 @@ class CodeGenerationHandler:
         self.output_directory = Path(output_directory)
         self.output_directory.mkdir(exist_ok=True)
         
-        if TaskService is None:
-            raise ImportError("OryxForge TaskService not available. Please ensure oryxforge is installed.")
+        if WorkflowService is None:
+            raise ImportError("OryxForge WorkflowService not available. Please ensure oryxforge is installed.")
     
     def get_tools(self) -> List[Tool]:
         """Returns the tools this handler provides."""
@@ -88,7 +88,7 @@ class CodeGenerationHandler:
                 }
             ),
             Tool(
-                name="list_tasks",
+                name="list_sheets",
                 description="List all tasks in a workflow",
                 inputSchema={
                     "type": "object",
@@ -195,8 +195,8 @@ class CodeGenerationHandler:
                 arguments.get("dependencies"),
                 arguments.get("workflow_name", "default_workflow")
             )
-        elif tool_name == "list_tasks":
-            return await self._list_tasks(
+        elif tool_name == "list_sheets":
+            return await self._list_sheets(
                 arguments.get("workflow_name", "default_workflow")
             )
         elif tool_name == "delete_task":
@@ -226,9 +226,9 @@ class CodeGenerationHandler:
         """Create a new data processing task."""
         try:
             workflow_path = self.output_directory / f"{workflow_name}.py"
-            task_service = TaskService(str(workflow_path))
+            workflow_service = WorkflowService(str(workflow_path))
             
-            task_service.create(task_name, code, dependencies)
+            workflow_service.create(task_name, code, dependencies)
             
             return [TextContent(
                 type="text",
@@ -245,12 +245,12 @@ class CodeGenerationHandler:
         """Update an existing data processing task."""
         try:
             workflow_path = self.output_directory / f"{workflow_name}.py"
-            task_service = TaskService(str(workflow_path))
+            workflow_service = WorkflowService(str(workflow_path))
             
             if dependencies is not None:
-                task_service.update(task_name, new_code=code, new_dependencies=dependencies)
+                workflow_service.update(task_name, new_code=code, new_dependencies=dependencies)
             else:
-                task_service.update(task_name, new_code=code)
+                workflow_service.update(task_name, new_code=code)
             
             return [TextContent(
                 type="text",
@@ -263,7 +263,7 @@ class CodeGenerationHandler:
                 text=f"Error updating task '{task_name}': {str(e)}"
             )]
     
-    async def _list_tasks(self, workflow_name: str) -> List[TextContent]:
+    async def _list_sheets(self, workflow_name: str) -> List[TextContent]:
         """List all tasks in a workflow."""
         try:
             workflow_path = self.output_directory / f"{workflow_name}.py"
@@ -274,8 +274,8 @@ class CodeGenerationHandler:
                     text=f"Workflow '{workflow_name}' not found"
                 )]
             
-            task_service = TaskService(str(workflow_path))
-            tasks = task_service.list_tasks()
+            workflow_service = WorkflowService(str(workflow_path))
+            tasks = workflow_service.list_sheets()
             
             if not tasks:
                 return [TextContent(
@@ -299,9 +299,9 @@ class CodeGenerationHandler:
         """Delete a task from a workflow."""
         try:
             workflow_path = self.output_directory / f"{workflow_name}.py"
-            task_service = TaskService(str(workflow_path))
+            workflow_service = WorkflowService(str(workflow_path))
             
-            task_service.delete(task_name)
+            workflow_service.delete(task_name)
             
             return [TextContent(
                 type="text",
@@ -341,9 +341,9 @@ class CodeGenerationHandler:
         """Read the code for a specific task."""
         try:
             workflow_path = self.output_directory / f"{workflow_name}.py"
-            task_service = TaskService(str(workflow_path))
+            workflow_service = WorkflowService(str(workflow_path))
             
-            code = task_service.read(task_name)
+            code = workflow_service.read(task_name)
             
             return [TextContent(
                 type="text",
@@ -360,9 +360,9 @@ class CodeGenerationHandler:
         """Rename a task and update all references."""
         try:
             workflow_path = self.output_directory / f"{workflow_name}.py"
-            task_service = TaskService(str(workflow_path))
+            workflow_service = WorkflowService(str(workflow_path))
             
-            task_service.rename(old_name, new_name)
+            workflow_service.rename(old_name, new_name)
             
             return [TextContent(
                 type="text",

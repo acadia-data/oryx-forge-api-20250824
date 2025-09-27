@@ -2,29 +2,29 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from oryxforge.services.task_service import TaskService
+from oryxforge.services.workflow_service import WorkflowService
 
 
 @pytest.fixture
 def temp_service():
-    """Create a TaskService with temporary directory."""
+    """Create a WorkflowService with temporary directory."""
     temp_dir = tempfile.mkdtemp()
-    service = TaskService(base_dir=temp_dir)
+    service = WorkflowService(base_dir=temp_dir)
     yield service
     shutil.rmtree(temp_dir)
 
 
-class TestTaskServiceCore:
+class TestWorkflowServiceCore:
     """Core CRUD functionality tests."""
     
     def test_create_task(self, temp_service):
-        """Test creating a new task."""
+        """Test creating a new sheet."""
         temp_service.create("TestTask", "df = pd.DataFrame({'x': [1, 2, 3]})")
-        
-        # Check task was created
-        tasks = temp_service.list_tasks()
+
+        # Check sheet was created
+        tasks = temp_service.list_sheets()
         assert "TestTask" in tasks
-        
+
         # Check code content
         code = temp_service.read("TestTask")
         assert "pd.DataFrame" in code
@@ -35,7 +35,7 @@ class TestTaskServiceCore:
         temp_service.create("TaskB", "df = pd.DataFrame({'b': [2]})", inputs=["TaskA"])
         
         # Check both tasks exist
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         assert "TaskA" in tasks
         assert "TaskB" in tasks
     
@@ -69,16 +69,16 @@ class TestTaskServiceCore:
     def test_delete_task(self, temp_service):
         """Test deleting a task."""
         temp_service.create("DeleteTask", "df = pd.DataFrame()")
-        assert "DeleteTask" in temp_service.list_tasks()
+        assert "DeleteTask" in temp_service.list_sheets()
         
         temp_service.delete("DeleteTask")
-        assert "DeleteTask" not in temp_service.list_tasks()
+        assert "DeleteTask" not in temp_service.list_sheets()
     
     def test_upsert_create(self, temp_service):
         """Test upsert creates new task."""
         temp_service.upsert("NewTask", "df = pd.DataFrame({'new': [1]})")
         
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         assert "NewTask" in tasks
     
     def test_upsert_update(self, temp_service):
@@ -91,52 +91,52 @@ class TestTaskServiceCore:
         assert "old" not in code
 
 
-class TestTaskServiceModules:
+class TestWorkflowServiceModules:
     """Test module-specific functionality."""
     
     def test_create_in_module(self, temp_service):
         """Test creating task in specific module."""
-        temp_service.create("ModuleTask", "df = pd.DataFrame()", module="test_module")
+        temp_service.create("ModuleTask", "df = pd.DataFrame()", dataset="test_module")
         
         # Check task in module
-        tasks = temp_service.list_tasks("test_module")
+        tasks = temp_service.list_sheets("test_module")
         assert "ModuleTask" in tasks
         
         # Check not in default module
-        default_tasks = temp_service.list_tasks()
+        default_tasks = temp_service.list_sheets()
         assert "ModuleTask" not in default_tasks
     
-    def test_list_modules(self, temp_service):
+    def test_list_datasets(self, temp_service):
         """Test listing available modules."""
-        temp_service.create("Task1", "df = pd.DataFrame()", module="module_a")
-        temp_service.create("Task2", "df = pd.DataFrame()", module="module_b")
+        temp_service.create("Task1", "df = pd.DataFrame()", dataset="module_a")
+        temp_service.create("Task2", "df = pd.DataFrame()", dataset="module_b")
         
-        modules = temp_service.list_modules()
+        modules = temp_service.list_datasets()
         assert "module_a" in modules
         assert "module_b" in modules
 
 
-class TestTaskServiceNaming:
+class TestWorkflowServiceNaming:
     """Test name sanitization functionality."""
     
     def test_sanitize_task_name(self, temp_service):
         """Test task name sanitization."""
         temp_service.create("invalid-name with spaces", "df = pd.DataFrame()")
         
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         # Should be converted to PascalCase
         assert any("Invalid" in task and "Name" in task for task in tasks)
     
     def test_sanitize_module_name(self, temp_service):
         """Test module name sanitization."""
-        temp_service.create("TestTask", "df = pd.DataFrame()", module="Invalid-Module Name")
+        temp_service.create("TestTask", "df = pd.DataFrame()", dataset="Invalid-Module Name")
         
-        modules = temp_service.list_modules()
+        modules = temp_service.list_datasets()
         # Should be converted to snake_case
         assert any("invalid" in mod and "module" in mod for mod in modules)
 
 
-class TestTaskServiceEdgeCases:
+class TestWorkflowServiceEdgeCases:
     """Test edge cases and error conditions."""
     
     def test_read_nonexistent_task(self, temp_service):
@@ -156,11 +156,11 @@ class TestTaskServiceEdgeCases:
     
     def test_empty_module_returns_empty_list(self, temp_service):
         """Test listing tasks from non-existent module."""
-        tasks = temp_service.list_tasks("nonexistent_module")
+        tasks = temp_service.list_sheets("nonexistent_module")
         assert tasks == []
 
 
-class TestTaskServiceDefaultModule:
+class TestWorkflowServiceDefaultModule:
     """Test default module (None) functionality."""
     
     def test_default_module_none(self, temp_service):
@@ -169,7 +169,7 @@ class TestTaskServiceDefaultModule:
         temp_service.create("DefaultTask", "df = pd.DataFrame()")
         
         # Should be in default module
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         assert "DefaultTask" in tasks
         
         # Should be able to read
@@ -177,7 +177,7 @@ class TestTaskServiceDefaultModule:
         assert "pd.DataFrame" in code
 
 
-class TestTaskServiceImportManagement:
+class TestWorkflowServiceImportManagement:
     """Test import management functionality."""
     
     def _read_full_file(self, temp_service, module=None):
@@ -345,7 +345,7 @@ class TestTaskServiceImportManagement:
         assert "from scipy import stats, optimize" in updated_full_content
 
 
-class TestTaskServiceCodeMethods:
+class TestWorkflowServiceCodeMethods:
     """Test code_methods functionality."""
 
     def _read_full_file(self, temp_service, module=None):
@@ -372,7 +372,7 @@ class TestTaskServiceCodeMethods:
         )
 
         # Check that the task was created
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         assert "TestCodeMethods" in tasks
 
         # Check full file content
@@ -493,7 +493,7 @@ class TestTaskServiceCodeMethods:
         )
 
         # Should work normally
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         assert "EmptyMethods" in tasks
 
         # Should only have run method
@@ -509,7 +509,7 @@ class TestTaskServiceCodeMethods:
             code_methods=None
         )
 
-        tasks = temp_service.list_tasks()
+        tasks = temp_service.list_sheets()
         assert "NoneMethods" in tasks
 
     def test_complex_method_code(self, temp_service):
@@ -542,7 +542,7 @@ else:
         assert "return None" in full_content
 
 
-class TestTaskServiceFlowExecution:
+class TestWorkflowServiceFlowExecution:
     """Test flow execution functionality."""
     
     def test_generate_flow_script_basic(self, temp_service):
@@ -567,11 +567,11 @@ class TestTaskServiceFlowExecution:
     def test_generate_flow_script_with_module(self, temp_service):
         """Test flow script generation with specific module using create_run."""
         # Create task in specific module
-        temp_service.create("ModuleTask", "df = pd.DataFrame()", module="test_module")
+        temp_service.create("ModuleTask", "df = pd.DataFrame()", dataset="test_module")
         
         script = temp_service.create_run(
             "ModuleTask", 
-            module="test_module",
+            dataset="test_module",
             flow_params={}
         )
         
@@ -797,7 +797,7 @@ class TestTaskServiceFlowExecution:
         """Test flow script generation with module-specific tasks."""
         # Create tasks in different modules
         temp_service.create("DefaultTask", "df = pd.DataFrame({'default': [1]})")
-        temp_service.create("ModuleTask", "df = pd.DataFrame({'module': [1]})", module="custom_module")
+        temp_service.create("ModuleTask", "df = pd.DataFrame({'module': [1]})", dataset="custom_module")
         
         # Test default module execution
         script1 = temp_service.create_preview("DefaultTask")
@@ -805,7 +805,7 @@ class TestTaskServiceFlowExecution:
         assert "task = tasks.DefaultTask" in script1
         
         # Test custom module execution
-        script2 = temp_service.create_preview("ModuleTask", module="custom_module")
+        script2 = temp_service.create_preview("ModuleTask", dataset="custom_module")
         assert "import tasks.custom_module as tasks" in script2
         assert "task = tasks.ModuleTask" in script2
     

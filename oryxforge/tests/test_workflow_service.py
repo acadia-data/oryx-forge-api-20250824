@@ -2,7 +2,7 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from oryxforge.services.workflow_service import WorkflowService
+from ..services.workflow_service import WorkflowService
 
 
 @pytest.fixture

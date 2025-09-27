@@ -1,11 +1,10 @@
 import httpx
-import adtiam
 from supabase import create_client
 
 # Get credentials
+import adtiam
 adtiam.load_creds('adt-db')
-# supabase = create_client(adtiam.creds['db']['supabase']['url'], adtiam.creds['db']['supabase']['key-admin'])
-supabase = create_client(adtiam.creds['db']['supabase']['url'], 'sb_secret_9xX1hQ4U-vLRxGJP-F5_0Q_hDS-t08a')
+supabase = create_client(adtiam.creds['db']['supabase']['url'], adtiam.creds['db']['supabase']['key-admin'])
 
 # Get user_owner and project_id from database
 data_source_id = 'de73a2b6-3c0e-4c8d-b579-7d42715e9da6'

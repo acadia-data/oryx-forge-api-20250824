@@ -19,6 +19,15 @@ except ImportError:
     pass
 
 
+# Add admin command group
+try:
+    from .admin import admin
+    cli.add_command(admin)
+except ImportError:
+    # Admin dependencies not installed, skip admin commands
+    pass
+
+
 # Add other command groups here as they're developed
 # Example:
 # try:

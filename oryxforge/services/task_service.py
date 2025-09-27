@@ -37,15 +37,54 @@ class TaskService:
         """Parse import string into individual import statements. Keep it simple for now."""
         if not imports_str or not imports_str.strip():
             return []
-        
+
         imports = []
         for line in imports_str.strip().split('\n'):
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
             imports.append(line)
-                    
+
         return imports
+
+    def _extract_imports_from_code(self, code: str) -> tuple[str, str]:
+        """Extract import statements from code and return (cleaned_code, imports_string)."""
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # If code can't be parsed, return as-is
+            return code, ""
+
+        imports = []
+        non_import_nodes = []
+
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                imports.append(ast.unparse(node))
+            else:
+                non_import_nodes.append(node)
+
+        # Reconstruct code without imports
+        if non_import_nodes:
+            cleaned_tree = ast.Module(body=non_import_nodes, type_ignores=[])
+            cleaned_code = ast.unparse(cleaned_tree)
+        else:
+            cleaned_code = ""
+
+        imports_string = "\n".join(imports) if imports else ""
+        return cleaned_code, imports_string
+
+    def _ensure_save_statement(self, code: str) -> str:
+        """Ensure code ends with self.save(df_out) if not already present."""
+        if not code.strip():
+            return "df_out = None\nself.save(df_out)"
+
+        # Check if code already has self.save() call
+        if "self.save(" in code:
+            return code
+
+        # Add self.save(df_out) at the end
+        return code.rstrip() + "\nself.save(df_out)"
 
     def _get_existing_imports(self, tree) -> dict[str, str | None]:
         """Get existing imports as {module: alias} dict."""
@@ -225,16 +264,69 @@ class TaskService:
         
         return clean_module, clean_task
 
-    def _generate_class_source(self, task: str, code: str, inputs: list[str]) -> str:
+    def _sanitize_method_name(self, method_name: str) -> str:
+        """Sanitize method name to be valid Python identifier."""
+        if not method_name or not str(method_name).strip():
+            return "default_method"
+
+        method_name = str(method_name).strip()
+
+        # Convert to snake_case and clean up
+        method_name = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', method_name)
+        method_name = re.sub(r'[\s\-\.]+', '_', method_name)
+        method_name = re.sub(r'[^a-zA-Z0-9_]', '', method_name)
+        method_name = method_name.lower()
+        method_name = re.sub(r'_{2,}', '_', method_name)
+        method_name = method_name.strip('_')
+
+        # Handle edge cases
+        if not method_name or method_name.isdigit():
+            method_name = "method_" + method_name if method_name else "default_method"
+        elif method_name[0].isdigit():
+            method_name = "m_" + method_name
+
+        # Handle Python keywords and built-in method names
+        if keyword.iskeyword(method_name) or method_name in ['run', 'input', 'output', 'save']:
+            method_name += "_method"
+
+        # Length limit
+        if len(method_name) > 50:
+            method_name = method_name[:42] + "_method"
+
+        return method_name
+
+    def _generate_additional_methods(self, code_methods: dict[str, str]) -> str:
+        """Generate additional class methods from code_methods dict."""
+        if not code_methods:
+            return ""
+
+        methods = []
+        for method_name, method_code in code_methods.items():
+            # Sanitize method name to be valid Python identifier
+            clean_method_name = self._sanitize_method_name(method_name)
+
+            method_source = f"""    def {clean_method_name}(self):
+{textwrap.indent(method_code, '        ')}"""
+            methods.append(method_source)
+
+        return "\n\n" + "\n\n".join(methods)
+
+    def _generate_class_source(self, task: str, code: str, inputs: list[str], code_methods: dict[str, str] = None) -> str:
         """Generate source code for a task class."""
         decorator_str = ""
         if inputs:
             inputs_str = ", ".join(inputs)
             decorator_str = f"@d6tflow.requires({inputs_str})\n"
-        
-        class_source = f"""{decorator_str}class {task}(d6tflow.tasks.PandasPq):
+
+        # Ensure code has self.save(df_out) at the end
+        code = self._ensure_save_statement(code)
+
+        # Generate additional methods
+        additional_methods = self._generate_additional_methods(code_methods or {})
+
+        class_source = f"""{decorator_str}class {task}(d6tflow.tasks.TaskPqPandas):
     def run(self):
-{textwrap.indent(code, '        ')}"""
+{textwrap.indent(code, '        ')}{additional_methods}"""
         return class_source
 
     # ---------- Internal Helpers ----------
@@ -255,51 +347,51 @@ class TaskService:
 
     # ---------- CRUD Methods ----------
 
-    def create(self, task: str, code: str, module: str = None, inputs: list[str] = None, imports: str = None):
+    def create(self, task: str, code: str, module: str = None, inputs: list[str] = None, imports: str = None, code_methods: dict[str, str] = None):
         """Create a new task class (fails if already exists)."""
         module, task, filename = self._prepare_task_operation(module, task)
         inputs = self._sanitize_inputs(inputs or [])
-        
+
         # Load existing file or create new tree
         if filename.exists():
             tree = ast.parse(filename.read_text())
         else:
             tree = ast.parse("")
-        
+
         # Ensure base imports first
         self._ensure_imports(tree)
-        
+
         # Add custom imports if provided
         if imports:
             self._merge_imports(tree, imports)
-        
+
         if self._find_class(tree, task):
             raise ValueError(f"Class {task} already exists in {module}")
 
-        class_source = self._generate_class_source(task, code, inputs)
+        class_source = self._generate_class_source(task, code, inputs, code_methods)
         class_ast = ast.parse(class_source)
         class_def = class_ast.body[0]
-        
+
         tree.body.append(class_def)
         self._save_file(filename, tree)
         status_msg = f"Created {task} in {self._get_module_display(module)}"
         logger.success(status_msg)
         return status_msg
 
-    def upsert(self, task: str, code: str, module: str = None, inputs: list[str] = None, imports: str = None):
+    def upsert(self, task: str, code: str, module: str = None, inputs: list[str] = None, imports: str = None, code_methods: dict[str, str] = None):
         """Create a new task class or update if it already exists (upsert)."""
         module, task, filename = self._prepare_task_operation(module, task)
-        
+
         # Check if task already exists
         if filename.exists():
             tree = ast.parse(filename.read_text())
             existing_class = self._find_class(tree, task)
             if existing_class:
                 # Update existing class
-                return self.update(task, module=module, new_code=code, new_inputs=inputs, new_imports=imports)
-        
+                return self.update(task, module=module, new_code=code, new_inputs=inputs, new_imports=imports, new_code_methods=code_methods)
+
         # Create new class
-        return self.create(task, code, module=module, inputs=inputs, imports=imports)
+        return self.create(task, code, module=module, inputs=inputs, imports=imports, code_methods=code_methods)
 
     def read(self, task: str, module: str = None, method_only: bool = True) -> str:
         """Return the source code for a given class or just run() method body."""
@@ -333,20 +425,23 @@ class TaskService:
         new_code: str = None,
         new_inputs: list[str] = None,
         new_imports: str = None,
+        new_code_methods: dict[str, str] = None,
     ):
         """
         Update an existing class.
         - new_code: replace run() method body
         - new_inputs: replace @d6tflow.requires(...)
         - new_imports: add new imports to the file
+        - new_code_methods: replace all custom methods with new ones from dict
         """
         module, task, filename = self._prepare_task_operation(module, task)
         if new_inputs is not None:
             new_inputs = self._sanitize_inputs(new_inputs)
-        
+
+
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(module)} not found")
-        
+
         tree = ast.parse(filename.read_text())
         cls = self._find_class(tree, task)
         if not cls:
@@ -357,6 +452,9 @@ class TaskService:
             self._merge_imports(tree, new_imports)
 
         if new_code:
+            # Ensure code has self.save(df_out) at the end
+            new_code = self._ensure_save_statement(new_code)
+
             for node in cls.body:
                 if isinstance(node, ast.FunctionDef) and node.name == "run":
                     node.body = ast.parse(textwrap.dedent(new_code)).body
@@ -389,6 +487,24 @@ class TaskService:
                     keywords=[]
                 )
                 cls.decorator_list.insert(0, decorator_ast)
+
+        if new_code_methods:
+            # Remove existing custom methods (keep only run, input, output, save)
+            standard_methods = {'run', 'input', 'output', 'save'}
+            cls.body = [
+                node for node in cls.body
+                if not (isinstance(node, ast.FunctionDef) and node.name not in standard_methods)
+            ]
+
+            # Add new methods
+            for method_name, method_code in new_code_methods.items():
+                clean_method_name = self._sanitize_method_name(method_name)
+
+                # Create method AST
+                method_ast = ast.parse(f"""def {clean_method_name}(self):
+{textwrap.indent(method_code, '    ')}""").body[0]
+
+                cls.body.append(method_ast)
 
         self._save_file(filename, tree)
         status_msg = f"Updated {task} in {self._get_module_display(module)}"

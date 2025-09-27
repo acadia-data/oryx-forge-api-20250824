@@ -76,7 +76,9 @@ Total: 13 tools
 ## Claude setup
 
 ```bash
-claude mcp add oryx -- oryxforge mcp serve
+claude mcp add oryxforge --scope local -- oryxforge mcp serve
+claude mcp add oryxforge --scope user -- oryxforge mcp serve # global but creates issues with updating
+claude --debug # for testing if it fails
 claude mcp remove oryxforge
 claude mcp remove mcp_server
 claude mcp remove OryxForge

@@ -62,9 +62,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public';
 
+-- ********************************************************************
+-- Create function to auto-create default datasets
+-- ********************************************************************
 
 -- Create trigger to call the function
 CREATE TRIGGER auto_create_datasheet
     AFTER INSERT ON datasets
     FOR EACH ROW
     EXECUTE FUNCTION create_default_datasheet();
+
+
+-- Create function to auto-create default datasets when a project is created
+CREATE OR REPLACE FUNCTION public.create_default_datasets()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+    -- Create scratchpad dataset
+    INSERT INTO datasets (name, user_owner, project_id, created_at, updated_at)
+    VALUES ('scratchpad', NEW.user_owner, NEW.id, now(), now());
+
+    -- Create view dataset
+    INSERT INTO datasets (name, user_owner, project_id, created_at, updated_at)
+    VALUES ('view', NEW.user_owner, NEW.id, now(), now());
+
+    RETURN NEW;
+END;
+$function$;
+
+-- Create trigger to automatically create default datasets after project creation
+CREATE TRIGGER create_default_datasets_trigger
+    AFTER INSERT ON public.projects
+    FOR EACH ROW
+    EXECUTE FUNCTION public.create_default_datasets();

@@ -7,7 +7,7 @@ name = "oryxforge"
 version = "25.9.8"
 description = "Task management and workflow orchestration library with MCP support"
 readme = "README.md"
-license = "Commercial"
+license = {text = "Commercial"}
 authors = [
     {name = "Oryx Intelligence LLC", email = "dev@oryxintel.com"},
 ]

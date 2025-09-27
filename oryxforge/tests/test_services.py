@@ -345,6 +345,203 @@ class TestTaskServiceImportManagement:
         assert "from scipy import stats, optimize" in updated_full_content
 
 
+class TestTaskServiceCodeMethods:
+    """Test code_methods functionality."""
+
+    def _read_full_file(self, temp_service, module=None):
+        """Helper to read full file content including all methods."""
+        from pathlib import Path
+        if module is None:
+            file_path = Path(temp_service.base_dir) / "tasks" / "__init__.py"
+        else:
+            file_path = Path(temp_service.base_dir) / "tasks" / f"{module}.py"
+        return file_path.read_text()
+
+    def test_create_task_with_code_methods(self, temp_service):
+        """Test creating task with additional methods."""
+        code_methods = {
+            'eda': 'return self.output().read().head(10)',
+            'summary': 'df = self.output().read()\nreturn df.describe()',
+            'plot-data': 'import matplotlib.pyplot as plt\ndf = self.output().read()\nplt.plot(df)'
+        }
+
+        temp_service.create(
+            "TestCodeMethods",
+            "df = pd.DataFrame({'x': [1, 2, 3]})",
+            code_methods=code_methods
+        )
+
+        # Check that the task was created
+        tasks = temp_service.list_tasks()
+        assert "TestCodeMethods" in tasks
+
+        # Check full file content
+        full_content = self._read_full_file(temp_service)
+        assert "def eda(self):" in full_content
+        assert "def summary(self):" in full_content
+        assert "def plot_data(self):" in full_content  # Method name should be sanitized
+        assert "return self.output().read().head(10)" in full_content
+        assert "return df.describe()" in full_content
+        assert "plt.plot(df)" in full_content
+
+    def test_upsert_task_with_code_methods(self, temp_service):
+        """Test upsert with code_methods."""
+        code_methods = {
+            'analyze': 'data = self.output().read()\nreturn data.mean()'
+        }
+
+        temp_service.upsert(
+            "UpsertWithMethods",
+            "df = pd.DataFrame({'values': [1, 2, 3, 4, 5]})",
+            code_methods=code_methods
+        )
+
+        full_content = self._read_full_file(temp_service)
+        assert "def analyze(self):" in full_content
+        assert "return data.mean()" in full_content
+
+    def test_update_task_with_code_methods(self, temp_service):
+        """Test updating existing task with new methods."""
+        # Create initial task
+        temp_service.create(
+            "UpdateMethods",
+            "df = pd.DataFrame({'initial': [1]})"
+        )
+
+        # Update with new methods
+        new_methods = {
+            'method1': 'return "method1"',
+            'method2': 'return "method2"'
+        }
+
+        temp_service.update(
+            "UpdateMethods",
+            new_code_methods=new_methods
+        )
+
+        full_content = self._read_full_file(temp_service)
+        assert "def method1(self):" in full_content
+        assert "def method2(self):" in full_content
+        assert "return 'method1'" in full_content
+        assert "return 'method2'" in full_content
+
+    def test_update_replaces_existing_methods(self, temp_service):
+        """Test that updating methods replaces existing custom methods."""
+        # Create task with initial methods
+        initial_methods = {
+            'old_method': 'return "old"'
+        }
+
+        temp_service.create(
+            "ReplaceMethodsTest",
+            "df = pd.DataFrame()",
+            code_methods=initial_methods
+        )
+
+        # Verify initial method exists
+        full_content = self._read_full_file(temp_service)
+        assert "def old_method(self):" in full_content
+
+        # Update with new methods
+        new_methods = {
+            'new_method': 'return "new"'
+        }
+
+        temp_service.update(
+            "ReplaceMethodsTest",
+            new_code_methods=new_methods
+        )
+
+        # Check that old method is gone and new method exists
+        updated_content = self._read_full_file(temp_service)
+        assert "def old_method(self):" not in updated_content
+        assert "def new_method(self):" in updated_content
+        assert "return 'new'" in updated_content
+
+    def test_method_name_sanitization(self, temp_service):
+        """Test that method names are properly sanitized."""
+        code_methods = {
+            'invalid-name': 'return 1',
+            'Another Name': 'return 2',
+            '123numeric': 'return 3',
+            'class': 'return 4',  # Python keyword
+            'run': 'return 5'     # Reserved method name
+        }
+
+        temp_service.create(
+            "SanitizeTest",
+            "df = pd.DataFrame()",
+            code_methods=code_methods
+        )
+
+        full_content = self._read_full_file(temp_service)
+        assert "def invalid_name(self):" in full_content
+        assert "def another_name(self):" in full_content
+        assert "def m_123numeric(self):" in full_content
+        assert "def class_method(self):" in full_content
+        assert "def run_method(self):" in full_content
+
+        # Should still have the original run method
+        assert "def run(self):" in full_content
+
+    def test_empty_code_methods(self, temp_service):
+        """Test that empty code_methods dict doesn't break anything."""
+        temp_service.create(
+            "EmptyMethods",
+            "df = pd.DataFrame()",
+            code_methods={}
+        )
+
+        # Should work normally
+        tasks = temp_service.list_tasks()
+        assert "EmptyMethods" in tasks
+
+        # Should only have run method
+        full_content = self._read_full_file(temp_service)
+        method_count = full_content.count("def ")
+        assert method_count == 1  # Only run method
+
+    def test_none_code_methods(self, temp_service):
+        """Test that None code_methods works normally."""
+        temp_service.create(
+            "NoneMethods",
+            "df = pd.DataFrame()",
+            code_methods=None
+        )
+
+        tasks = temp_service.list_tasks()
+        assert "NoneMethods" in tasks
+
+    def test_complex_method_code(self, temp_service):
+        """Test methods with complex code including multiple lines."""
+        complex_methods = {
+            'complex_analysis': '''
+# This is a complex method
+data = self.output().read()
+if len(data) > 0:
+    result = data.groupby('category').agg({
+        'value': ['mean', 'std', 'count']
+    })
+    return result
+else:
+    return None
+'''.strip()
+        }
+
+        temp_service.create(
+            "ComplexMethods",
+            "df = pd.DataFrame({'category': ['A', 'B'], 'value': [1, 2]})",
+            code_methods=complex_methods
+        )
+
+        full_content = self._read_full_file(temp_service)
+        assert "def complex_analysis(self):" in full_content
+        # Comments might get stripped by AST, so just check the code logic
+        assert "data.groupby('category')" in full_content
+        assert "return result" in full_content
+        assert "return None" in full_content
+
+
 class TestTaskServiceFlowExecution:
     """Test flow execution functionality."""
     

@@ -204,3 +204,13 @@ def import_file(request: FileImportRequest):
     
     return result
 
+
+@app.post("/files/import")
+def import_file(request: FileImportRequest):
+    from oryxforge.services.workflow_service import WorkflowService
+    svc = WorkflowService()
+    code = svc.run_load('hpi',execute=False,dataset='sources',file_out=None)
+    ns = {}
+    exec(code, ns)
+    df_out = ns['df_out']
+    return df_out.json(orient='records')

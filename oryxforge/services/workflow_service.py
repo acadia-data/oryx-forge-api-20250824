@@ -932,6 +932,7 @@ class Temp: pass
 
     def run_flow(self, sheet: str, dataset: str = None,
                   flow_params: dict = None, reset_sheets: list[str] = None,
+                  reset_task: bool = False,
                   file_out: str = "run_flow.py", execute: bool = False) -> str | dict:
         """Generate a run script for a d6tflow workflow.
 
@@ -940,6 +941,7 @@ class Temp: pass
             dataset: Dataset name
             flow_params: Flow parameters dict
             reset_sheets: List of sheets to reset
+            reset_task: If True, reset the target task before running
             file_out: File path to write the script to. Defaults to 'run_flow.py'. Set to None to skip writing.
             execute: If True, execute the script after generating it. Requires file_out to be set.
 
@@ -948,7 +950,8 @@ class Temp: pass
             If file_out specified (no execute): str with file path written to
             Otherwise: the script content
         """
-        script = self._generate_flow_script(sheet, dataset, flow_params, reset_sheets, preview_only=False)
+        script = self._generate_flow_script(sheet, dataset, flow_params, reset_sheets,
+                                           preview_only=False, reset_task=reset_task)
         return self._write_and_execute_script(script, file_out, execute, "run")
 
     def run_preview(self, sheet: str, dataset: str = None,
@@ -1011,6 +1014,43 @@ sys.path.insert(0, os.getcwd())
 
         return self._write_and_execute_script(script, file_out, execute, "task")
 
+    def run_load(self, sheet: str, dataset: str = None,
+                 load_meta_json: bool = False, run_flow: bool = False,
+                 reset_task: bool = False,
+                 file_out: str = "run_load.py", execute: bool = False) -> str | dict:
+        """Generate a script to run a workflow and load its output.
+
+        Args:
+            sheet: Sheet name
+            dataset: Dataset name
+            load_meta_json: If True, use outputLoadJson (metadata), else outputLoad (data)
+            run_flow: If True, run the workflow before loading
+            reset_task: If True, reset the target task before running
+            file_out: File path to write the script to. Defaults to 'run_load.py'. Set to None to skip writing.
+            execute: If True, execute the script after generating it. Requires file_out to be set.
+
+        Returns:
+            If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
+            If file_out specified (no execute): str with file path written to
+            Otherwise: the script content
+        """
+        script = self._generate_flow_script(
+            sheet, dataset,
+            flow_params=None,
+            reset_sheets=None,
+            preview_only=False,
+            reset_task=reset_task,
+            load_output=True,
+            load_meta_json=load_meta_json
+        )
+
+        # Modify the script to conditionally run flow
+        if not run_flow:
+            # Remove the flow.run() line by replacing Execute section
+            script = script.replace("# Execute\nflow.run()", "# Execute (skipped)\n# flow.run()")
+
+        return self._write_and_execute_script(script, file_out, execute, "load")
+
     def execute_run(self, script: str) -> str:
         """Execute a run script using subprocess."""
         return self._execute_script(script)
@@ -1061,33 +1101,64 @@ sys.path.insert(0, os.getcwd())
         
         return validated_tasks
 
-    def _generate_flow_script(self, sheet: str, dataset: str, flow_params: dict, reset_sheets: list[str], preview_only: bool = False) -> str:
-        """Generate the flow_run.py script content using string manipulation."""
+    def _generate_flow_script(self, sheet: str, dataset: str, flow_params: dict, reset_sheets: list[str],
+                              preview_only: bool = False, reset_task: bool = False,
+                              load_output: bool = False, load_meta_json: bool = False) -> str:
+        """Generate the flow_run.py script content using string manipulation.
+
+        Args:
+            sheet: Sheet name
+            dataset: Dataset name
+            flow_params: Flow parameters dict
+            reset_sheets: List of sheets to reset
+            preview_only: If True, generate preview script
+            reset_task: If True, reset the target task before running
+            load_output: If True, load the output after running
+            load_meta_json: If True, use outputLoadJson (metadata), else outputLoad (data)
+        """
         # Validate sheet exists
         dataset_clean, sheet_clean = self._validate_flow_task(sheet, dataset)
 
         # Validate reset_sheets exist
         reset_tasks = self._validate_reset_tasks(reset_sheets or [], dataset_clean)
-        
+
         # Import section
         if dataset_clean is None:
             import_line = "import tasks"
             task_ref = f"tasks.{sheet_clean}"
         else:
-            import_line = f"import tasks.{dataset_clean} as tasks"  
+            import_line = f"import tasks.{dataset_clean} as tasks"
             task_ref = f"tasks.{sheet_clean}"
-        
+
         # Parameters section
         params_str = repr(flow_params or {})
-        
-        # Reset section
+
+        # Reset section - multiple sheets
         reset_lines = []
-        for reset_task in (reset_tasks or []):
-            reset_lines.append(f"flow.reset(tasks.{reset_task})")
-        reset_section = "\n".join(reset_lines)
-        
+        for reset_t in (reset_tasks or []):
+            reset_lines.append(f"flow.reset(tasks.{reset_t})")
+        reset_section = "\n".join(reset_lines) if reset_lines else ""
+
+        # Reset target task section
+        reset_target_section = ""
+        if reset_task:
+            reset_target_section = "flow.reset()"
+
         # Action section
-        action = "flow.preview()" if preview_only else "flow.run()"
+        if preview_only:
+            action = "flow.preview()"
+        elif load_output:
+            action = "flow.run()"
+        else:
+            action = "flow.run()"
+
+        # Load output section
+        load_section = ""
+        if load_output:
+            if load_meta_json:
+                load_section = "\n# Load output metadata\ndfd_out = flow.outputLoadJson(task)"
+            else:
+                load_section = "\n# Load output data\ndf_out = flow.outputLoad(task)"
 
         # Generate complete script with path fix
         script = f"""import sys
@@ -1109,11 +1180,13 @@ flow = d6tflow.Workflow(task=task, params=params)
 # Reset tasks
 {reset_section}
 
+# Reset target task
+{reset_target_section}
+
 # Execute
-{action}
+{action}{load_section}
 """
-        
-        logger.debug(f"Generated flow script:\n{script}")
+
         return script
 
     def _execute_script(self, script: str) -> str:

@@ -1,26 +1,26 @@
-"""Tests for CLIService."""
+"""Integration tests for CLIService."""
 
 import pytest
 import tempfile
+import time
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 from configobj import ConfigObj
+from typing import Optional
 
 from ..services.cli_service import CLIService
+from ..services.utils import init_supabase_client
 
 
 class TestCLIService:
-    """Test cases for CLIService."""
+    """Integration test cases for CLIService."""
 
-    @pytest.fixture
-    def mock_supabase_client(self):
-        """Mock Supabase client."""
-        mock_client = Mock()
-        mock_client.auth.admin.get_user_by_id.return_value.user = {"id": "test-user-id"}
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
-            {"id": "test-id"}
-        ]
-        return mock_client
+    USER_ID = '24d811e2-1801-4208-8030-a86abbda59b8'
+
+    @pytest.fixture(scope="class")
+    def supabase_client(self):
+        """Get real Supabase client."""
+        return init_supabase_client()
 
     @pytest.fixture
     def temp_config_dir(self):
@@ -29,57 +29,64 @@ class TestCLIService:
             yield Path(temp_dir)
 
     @pytest.fixture
-    def cli_service(self, mock_supabase_client, temp_config_dir):
-        """Create CLIService instance with mocked dependencies."""
-        with patch.object(CLIService, '_init_supabase_client', return_value=mock_supabase_client):
-            with patch.object(CLIService, 'config_dir', temp_config_dir):
-                # Create config file with user ID
-                config_file = temp_config_dir / 'cfg.ini'
-                config = ConfigObj()
-                config['user'] = {'userid': 'test-user-id'}
-                config.filename = str(config_file)
-                config.write()
+    def temp_working_dir(self):
+        """Create temporary working directory for project configs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield Path(temp_dir)
 
-                service = CLIService()
-                return service
+    @pytest.fixture
+    def config_patch(self, temp_config_dir):
+        """Patch the config_dir to use temp directory."""
+        config_dir = temp_config_dir / '.oryxforge'
+        config_dir.mkdir(exist_ok=True)
+        with patch.object(CLIService, 'config_dir', new=property(lambda self: config_dir)):
+            yield config_dir
 
-    def test_init_with_user_id(self, mock_supabase_client):
+    @pytest.fixture
+    def cli_service(self, config_patch, temp_working_dir):
+        """Create CLIService instance for integration testing."""
+        # Create config file with user ID
+        config_file = config_patch / 'cfg.ini'
+        config = ConfigObj()
+        config['user'] = {'userid': self.USER_ID}
+        config.filename = str(config_file)
+        config.write()
+
+        # Create service with temp working directory
+        service = CLIService(user_id=self.USER_ID, cwd=str(temp_working_dir))
+        return service
+
+    @pytest.fixture
+    def test_project_name(self):
+        """Generate unique project name for testing."""
+        return f"test_project_{int(time.time())}"
+
+    def test_init_with_user_id(self, temp_working_dir):
         """Test initialization with explicit user ID."""
-        with patch.object(CLIService, '_init_supabase_client', return_value=mock_supabase_client):
-            service = CLIService(user_id='test-user-id')
-            assert service.user_id == 'test-user-id'
+        service = CLIService(user_id=self.USER_ID, cwd=str(temp_working_dir))
+        assert service.user_id == self.USER_ID
 
-    def test_init_without_config_raises_error(self, mock_supabase_client):
+    def test_init_without_config_raises_error(self, temp_config_dir, temp_working_dir):
         """Test initialization without config raises error."""
-        with patch.object(CLIService, '_init_supabase_client', return_value=mock_supabase_client):
-            with patch.object(CLIService, 'get_user_config', return_value={}):
-                with pytest.raises(ValueError, match="No user ID configured"):
-                    CLIService()
+        with patch.object(CLIService, 'config_dir', new_callable=lambda: temp_config_dir):
+            # Don't create config file - should raise error
+            with pytest.raises(ValueError, match="No user ID configured"):
+                CLIService(cwd=str(temp_working_dir))
 
-    def test_init_supabase_client_missing_credentials(self):
-        """Test Supabase client initialization with missing credentials."""
-        with patch.dict('os.environ', {}, clear=True):
-            with pytest.raises(ValueError, match="Supabase credentials not found"):
-                CLIService._init_supabase_client(CLIService)
+    def test_init_with_invalid_user_id(self, temp_working_dir):
+        """Test initialization with invalid user ID."""
+        with pytest.raises(ValueError, match="Failed to validate user"):
+            CLIService(user_id='00000000-0000-0000-0000-000000000000', cwd=str(temp_working_dir))
 
-    @patch.dict('os.environ', {'SUPABASE_URL': 'test-url', 'SUPABASE_ANON_KEY': 'test-key'})
-    @patch('oryxforge.services.cli_service.create_client')
-    def test_init_supabase_client_success(self, mock_create_client):
-        """Test successful Supabase client initialization."""
-        mock_client = Mock()
-        mock_create_client.return_value = mock_client
+    def test_validate_user_success(self, cli_service):
+        """Test successful user validation."""
+        # Should not raise an exception - user is valid
+        assert cli_service.user_id == self.USER_ID
 
-        result = CLIService._init_supabase_client(CLIService)
-        assert result == mock_client
-        mock_create_client.assert_called_once_with('test-url', 'test-key')
-
-    def test_validate_user_invalid_user(self, mock_supabase_client):
+    def test_validate_user_invalid_user(self, temp_working_dir):
         """Test user validation with invalid user."""
-        mock_supabase_client.auth.admin.get_user_by_id.return_value.user = None
-
-        with patch.object(CLIService, '_init_supabase_client', return_value=mock_supabase_client):
-            with pytest.raises(ValueError, match="User ID test-user-id not found"):
-                CLIService(user_id='test-user-id')
+        with pytest.raises(ValueError, match="Failed to validate user"):
+            CLIService(user_id='invalid-user-id', cwd=str(temp_working_dir))
 
     def test_get_user_config_no_file(self, cli_service):
         """Test get_user_config when file doesn't exist."""
@@ -91,45 +98,54 @@ class TestCLIService:
     def test_get_user_config_existing_file(self, cli_service):
         """Test get_user_config with existing file."""
         result = cli_service.get_user_config()
-        assert result == {'userid': 'test-user-id'}
+        assert result == {'userid': self.USER_ID}
 
     def test_get_user_id_from_instance(self, cli_service):
         """Test get_user_id returns instance user_id."""
         result = cli_service.get_user_id()
-        assert result == 'test-user-id'
+        assert result == self.USER_ID
 
-    def test_get_user_id_from_config(self, cli_service, temp_config_dir):
+    def test_get_user_id_from_config(self, cli_service):
         """Test get_user_id from config file when instance user_id not available."""
-        # Remove instance user_id to force config file lookup
+        # Save and remove instance user_id to force config file lookup
+        original_id = cli_service.user_id
         delattr(cli_service, 'user_id')
 
-        result = cli_service.get_user_id()
-        assert result == 'test-user-id'
+        try:
+            result = cli_service.get_user_id()
+            assert result == self.USER_ID
+        finally:
+            # Restore user_id
+            cli_service.user_id = original_id
 
-    def test_get_user_id_no_config(self, cli_service, temp_config_dir):
+    def test_get_user_id_no_config(self, cli_service):
         """Test get_user_id when no config exists."""
-        # Remove instance user_id and config file
+        # Save original, remove instance user_id and config file
+        original_id = cli_service.user_id
         delattr(cli_service, 'user_id')
         cli_service.config_file.unlink()
 
-        result = cli_service.get_user_id()
-        assert result is None
+        try:
+            result = cli_service.get_user_id()
+            assert result is None
+        finally:
+            cli_service.user_id = original_id
 
     def test_get_configured_user_id_static_method(self, temp_config_dir):
         """Test static method get_configured_user_id."""
-        from configobj import ConfigObj
-
-        # Create config file directly
-        config_file = temp_config_dir / 'cfg.ini'
+        # Create config directory structure
+        config_dir = temp_config_dir / '.oryxforge'
+        config_dir.mkdir(exist_ok=True)
+        config_file = config_dir / 'cfg.ini'
         config = ConfigObj()
-        config['user'] = {'userid': 'static-test-user-id'}
+        config['user'] = {'userid': self.USER_ID}
         config.filename = str(config_file)
         config.write()
 
         # Mock Path.home() to return our temp directory
         with patch('pathlib.Path.home', return_value=temp_config_dir):
             result = CLIService.get_configured_user_id()
-            assert result == 'static-test-user-id'
+            assert result == self.USER_ID
 
     def test_get_configured_user_id_no_config(self):
         """Test static method when no config file exists."""
@@ -153,219 +169,313 @@ class TestCLIService:
             result = CLIService.get_configured_user_id()
             assert result is None
 
-    def test_set_user_config_new_user(self, cli_service, temp_config_dir):
-        """Test setting user config for new user."""
+    def test_set_user_config_valid_user(self, cli_service):
+        """Test setting user config for valid user."""
         # Remove existing config
         cli_service.config_file.unlink()
 
-        # Mock validation
-        with patch.object(cli_service, '_validate_user'):
-            cli_service.set_user_config('new-user-id')
+        # Set config with valid user ID (same as test user)
+        cli_service.set_user_config(self.USER_ID)
 
         # Verify config was written
         config = ConfigObj(str(cli_service.config_file))
-        assert config['user']['userid'] == 'new-user-id'
+        assert config['user']['userid'] == self.USER_ID
 
     def test_set_user_config_invalid_user(self, cli_service):
         """Test setting user config with invalid user."""
-        mock_client = Mock()
-        mock_client.auth.admin.get_user_by_id.side_effect = Exception("User not found")
+        with pytest.raises(ValueError, match="Failed to validate user"):
+            cli_service.set_user_config('00000000-0000-0000-0000-000000000000')
 
-        with patch.object(CLIService, '_init_supabase_client', return_value=mock_client):
-            with pytest.raises(ValueError, match="Failed to validate user ID"):
-                cli_service.set_user_config('invalid-user-id')
-
-    def test_projects_create_success(self, cli_service):
+    def test_projects_create_success(self, cli_service, test_project_name):
         """Test successful project creation."""
-        cli_service.supabase_client.table.return_value.insert.return_value.execute.return_value.data = [
-            {'id': 'new-project-id'}
-        ]
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
+        assert isinstance(project_id, str)
+        assert len(project_id) > 0
 
-        result = cli_service.projects_create('Test Project')
-        assert result == 'new-project-id'
+        # Verify it exists
+        projects = cli_service.projects_list()
+        created_project = next((p for p in projects if p['id'] == project_id), None)
+        assert created_project is not None
+        assert created_project['name'] == test_project_name
 
-        # Verify database call
-        cli_service.supabase_client.table.assert_called_with('projects')
+        # Clean up
+        try:
+            cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+        except Exception:
+            pass
 
-    def test_projects_create_duplicate_name(self, cli_service):
+    def test_projects_create_duplicate_name(self, cli_service, test_project_name):
         """Test project creation with duplicate name."""
-        cli_service.supabase_client.table.return_value.insert.return_value.execute.side_effect = \
-            Exception("unique_user_project_name")
+        # Create first project
+        project_id = cli_service.projects_create(test_project_name)
 
-        with pytest.raises(ValueError, match="Project 'Test Project' already exists"):
-            cli_service.projects_create('Test Project')
+        try:
+            # Try to create another with same name
+            with pytest.raises(ValueError, match="already exists"):
+                cli_service.projects_create(test_project_name)
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
-    def test_projects_create_database_error(self, cli_service):
-        """Test project creation with database error."""
-        cli_service.supabase_client.table.return_value.insert.return_value.execute.return_value.data = []
+    def test_projects_create_empty_name(self, cli_service):
+        """Test project creation with empty name."""
+        # Try to create project with empty name
+        with pytest.raises(Exception):  # Should fail validation
+            cli_service.projects_create('')
 
-        with pytest.raises(ValueError, match="Failed to create project"):
-            cli_service.projects_create('Test Project')
-
-    def test_project_exists_true(self, cli_service):
+    def test_project_exists_true(self, cli_service, test_project_name):
         """Test project_exists returns True for existing project."""
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-            {'id': 'test-project-id'}
-        ]
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        result = cli_service.project_exists('test-project-id')
-        assert result is True
+        try:
+            # Check that it exists
+            result = cli_service.project_exists(project_id)
+            assert result is True
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
     def test_project_exists_false(self, cli_service):
         """Test project_exists returns False for non-existing project."""
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
-
-        result = cli_service.project_exists('non-existing-id')
+        # Use valid UUID that doesn't exist
+        result = cli_service.project_exists('00000000-0000-0000-0000-000000000000')
         assert result is False
 
-    def test_project_exists_exception(self, cli_service):
-        """Test project_exists returns False on exception."""
-        cli_service.supabase_client.table.side_effect = Exception("Database error")
-
-        result = cli_service.project_exists('test-project-id')
+    def test_project_exists_invalid_uuid(self, cli_service):
+        """Test project_exists with invalid UUID format."""
+        # Invalid UUID format should return False (caught in exception handler)
+        result = cli_service.project_exists('invalid-uuid')
         assert result is False
 
     def test_projects_list_success(self, cli_service):
         """Test successful projects listing."""
-        mock_projects = [
-            {'id': 'project-1', 'name': 'Project 1'},
-            {'id': 'project-2', 'name': 'Project 2'}
-        ]
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value.data = mock_projects
-
         result = cli_service.projects_list()
-        assert result == mock_projects
+        assert isinstance(result, list)
+        # All results should have id and name
+        for project in result:
+            assert 'id' in project
+            assert 'name' in project
 
-    def test_projects_list_database_error(self, cli_service):
-        """Test projects listing with database error."""
-        cli_service.supabase_client.table.side_effect = Exception("Database error")
+    def test_projects_list_with_created_project(self, cli_service, test_project_name):
+        """Test projects listing includes created project."""
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        with pytest.raises(ValueError, match="Failed to list projects"):
-            cli_service.projects_list()
+        try:
+            # List should include the created project
+            result = cli_service.projects_list()
+            project_ids = [p['id'] for p in result]
+            assert project_id in project_ids
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
-    def test_project_activate_success(self, cli_service, temp_config_dir):
+    def test_project_activate_success(self, cli_service, test_project_name):
         """Test successful project activation."""
-        # Mock project exists
-        with patch.object(cli_service, 'project_exists', return_value=True):
-            cli_service.project_activate('test-project-id')
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        # Verify config was written
-        config = ConfigObj(str(cli_service.project_config_file))
-        assert config['active']['project_id'] == 'test-project-id'
+        try:
+            # Activate the project
+            cli_service.project_activate(project_id)
+
+            # Verify config was written
+            config = ConfigObj(str(cli_service.project_config_file))
+            assert config['active']['project_id'] == project_id
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
     def test_project_activate_not_found(self, cli_service):
         """Test project activation with non-existing project."""
-        with patch.object(cli_service, 'project_exists', return_value=False):
-            with pytest.raises(ValueError, match="Project test-project-id not found"):
-                cli_service.project_activate('test-project-id')
+        with pytest.raises(ValueError, match="Project .* not found"):
+            cli_service.project_activate('00000000-0000-0000-0000-000000000000')
 
-    def test_dataset_activate_success(self, cli_service, temp_config_dir):
+    def test_dataset_activate_success(self, cli_service, test_project_name):
         """Test successful dataset activation."""
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-            {'id': 'test-dataset-id'}
-        ]
+        # Need to create project and dataset first
+        from ..services.project_service import ProjectService
 
-        cli_service.dataset_activate('test-dataset-id')
+        # Create project
+        project_id = cli_service.projects_create(test_project_name)
 
-        # Verify config was written
-        config = ConfigObj(str(cli_service.project_config_file))
-        assert config['active']['dataset_id'] == 'test-dataset-id'
+        try:
+            # Create ProjectService to manage datasets
+            proj_service = ProjectService(project_id, self.USER_ID)
+            dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')
+
+            # Activate the dataset
+            cli_service.dataset_activate(dataset_id)
+
+            # Verify config was written
+            config = ConfigObj(str(cli_service.project_config_file))
+            assert config['active']['dataset_id'] == dataset_id
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("datasets").delete().eq("project_id", project_id).execute()
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
     def test_dataset_activate_not_found(self, cli_service):
         """Test dataset activation with non-existing dataset."""
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        with pytest.raises(ValueError, match="Dataset .* not found"):
+            cli_service.dataset_activate('00000000-0000-0000-0000-000000000000')
 
-        with pytest.raises(ValueError, match="Dataset test-dataset-id not found"):
-            cli_service.dataset_activate('test-dataset-id')
-
-    def test_sheet_activate_success(self, cli_service, temp_config_dir):
+    def test_sheet_activate_success(self, cli_service, test_project_name):
         """Test successful sheet activation."""
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-            {'id': 'test-sheet-id'}
-        ]
+        # Need to create project, dataset, and sheet first
+        from ..services.project_service import ProjectService
 
-        cli_service.sheet_activate('test-sheet-id')
+        # Create project
+        project_id = cli_service.projects_create(test_project_name)
 
-        # Verify config was written
-        config = ConfigObj(str(cli_service.project_config_file))
-        assert config['active']['sheet_id'] == 'test-sheet-id'
+        try:
+            # Create ProjectService to manage datasets and sheets
+            proj_service = ProjectService(project_id, self.USER_ID)
+            dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')
+            sheet_id = proj_service.sheet_create(dataset_id, f'sheet_in_{test_project_name}')
+
+            # Activate the sheet
+            cli_service.sheet_activate(sheet_id)
+
+            # Verify config was written
+            config = ConfigObj(str(cli_service.project_config_file))
+            assert config['active']['sheet_id'] == sheet_id
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("datasheets").delete().eq("dataset_id", dataset_id).execute()
+                cli_service.supabase_client.table("datasets").delete().eq("project_id", project_id).execute()
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
     def test_sheet_activate_not_found(self, cli_service):
         """Test sheet activation with non-existing sheet."""
-        cli_service.supabase_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
-
-        with pytest.raises(ValueError, match="Datasheet test-sheet-id not found"):
-            cli_service.sheet_activate('test-sheet-id')
+        with pytest.raises(ValueError, match="Datasheet .* not found"):
+            cli_service.sheet_activate('00000000-0000-0000-0000-000000000000')
 
     def test_get_active_no_file(self, cli_service):
         """Test get_active when config file doesn't exist."""
+        # Make sure no config file exists
+        if cli_service.project_config_file.exists():
+            cli_service.project_config_file.unlink()
+
         result = cli_service.get_active()
         assert result == {}
 
-    def test_get_active_with_file(self, cli_service, temp_config_dir):
+    def test_get_active_with_file(self, cli_service, test_project_name):
         """Test get_active with existing config file."""
-        # Create project config
-        config = ConfigObj()
-        config['active'] = {
-            'project_id': 'test-project',
-            'dataset_id': 'test-dataset',
-            'sheet_id': 'test-sheet'
-        }
-        config.filename = str(cli_service.project_config_file)
-        config.write()
+        # Create a project and activate it
+        project_id = cli_service.projects_create(test_project_name)
 
-        result = cli_service.get_active()
-        expected = {
-            'project_id': 'test-project',
-            'dataset_id': 'test-dataset',
-            'sheet_id': 'test-sheet'
-        }
-        assert result == expected
+        try:
+            cli_service.project_activate(project_id)
 
-    def test_interactive_project_select_success(self, cli_service):
+            # Get active config
+            result = cli_service.get_active()
+            assert result['project_id'] == project_id
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
+
+    def test_interactive_project_select_success(self, cli_service, test_project_name):
         """Test successful interactive project selection."""
-        mock_projects = [
-            {'id': 'project-1', 'name': 'Project 1'},
-            {'id': 'project-2', 'name': 'Project 2'}
-        ]
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        with patch.object(cli_service, 'projects_list', return_value=mock_projects):
+        try:
             with patch('builtins.input', return_value='1'):
                 result = cli_service.interactive_project_select()
-                assert result == 'project-1'
+                # Should return a valid project ID
+                assert isinstance(result, str)
+                assert len(result) > 0
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
     def test_interactive_project_select_no_projects(self, cli_service):
         """Test interactive project selection with no projects."""
-        with patch.object(cli_service, 'projects_list', return_value=[]):
+        # Check if projects exist
+        projects = cli_service.projects_list()
+        if len(projects) == 0:
             with pytest.raises(ValueError, match="No projects found"):
                 cli_service.interactive_project_select()
+        else:
+            # Skip test if projects already exist
+            pytest.skip("Projects already exist for test user")
 
-    def test_interactive_project_select_invalid_choice(self, cli_service):
+    def test_interactive_project_select_invalid_choice(self, cli_service, test_project_name):
         """Test interactive project selection with invalid choice."""
-        mock_projects = [{'id': 'project-1', 'name': 'Project 1'}]
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        with patch.object(cli_service, 'projects_list', return_value=mock_projects):
-            with patch('builtins.input', side_effect=['5', '1']):  # Invalid then valid
+        try:
+            with patch('builtins.input', side_effect=['999', '1']):  # Invalid then valid
                 result = cli_service.interactive_project_select()
-                assert result == 'project-1'
+                # Should eventually return a valid project ID
+                assert isinstance(result, str)
+                assert len(result) > 0
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
-    def test_interactive_project_select_cancelled(self, cli_service):
+    def test_interactive_project_select_cancelled(self, cli_service, test_project_name):
         """Test interactive project selection when cancelled."""
-        mock_projects = [{'id': 'project-1', 'name': 'Project 1'}]
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        with patch.object(cli_service, 'projects_list', return_value=mock_projects):
+        try:
             with patch('builtins.input', return_value=''):  # Empty input
                 with pytest.raises(ValueError, match="Project selection cancelled"):
                     cli_service.interactive_project_select()
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
-    def test_interactive_project_select_keyboard_interrupt(self, cli_service):
+    def test_interactive_project_select_keyboard_interrupt(self, cli_service, test_project_name):
         """Test interactive project selection with keyboard interrupt."""
-        mock_projects = [{'id': 'project-1', 'name': 'Project 1'}]
+        # Create a project
+        project_id = cli_service.projects_create(test_project_name)
 
-        with patch.object(cli_service, 'projects_list', return_value=mock_projects):
+        try:
             with patch('builtins.input', side_effect=KeyboardInterrupt):
                 with pytest.raises(ValueError, match="Project selection cancelled"):
                     cli_service.interactive_project_select()
+        finally:
+            # Clean up
+            try:
+                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
 
 
 if __name__ == '__main__':

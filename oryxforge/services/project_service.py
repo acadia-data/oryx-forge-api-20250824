@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import pandas as pd
 import gcsfs
-from supabase import create_client, Client
+from supabase import Client
 from loguru import logger
 from .workflow_service import WorkflowService
+from .repo_service import RepoService
+from .utils import init_supabase_client
 
 
 class ProjectService:
@@ -31,7 +33,7 @@ class ProjectService:
         self.user_id = user_id
 
         # Initialize Supabase client
-        self.supabase_client = self._init_supabase_client()
+        self.supabase_client = init_supabase_client()
 
         # Validate project exists and belongs to user
         self._validate_project()
@@ -46,16 +48,6 @@ class ProjectService:
 
         # Initialize workflow service for name sanitization
         self.workflow_service = WorkflowService()
-
-    def _init_supabase_client(self) -> Client:
-        """Initialize Supabase client with credentials."""
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_ANON_KEY')
-
-        if not supabase_url or not supabase_key:
-            raise ValueError("Supabase credentials not found. Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.")
-
-        return create_client(supabase_url, supabase_key)
 
     def _validate_project(self) -> None:
         """Validate that project exists and belongs to user."""
@@ -75,6 +67,62 @@ class ProjectService:
 
         except Exception as e:
             raise ValueError(f"Failed to validate project: {str(e)}")
+
+    @classmethod
+    def create_project(cls, name: str, user_id: str, setup_repo: bool = True) -> str:
+        """
+        Create a new project with optional repository setup.
+
+        Args:
+            name: Project name (must be unique for user)
+            user_id: User ID who owns the project
+            setup_repo: Whether to create GitLab repository (default: True)
+
+        Returns:
+            str: Created project ID
+
+        Raises:
+            ValueError: If project creation or repository setup fails
+        """
+        # Initialize Supabase client for project creation
+        supabase_client = init_supabase_client()
+
+        try:
+            # Create project in database
+            response = (
+                supabase_client.table("projects")
+                .insert({
+                    "name": name,
+                    "user_owner": user_id
+                })
+                .execute()
+            )
+
+            if not response.data:
+                raise ValueError("Failed to create project")
+
+            project_id = response.data[0]['id']
+            logger.success(f"Created project '{name}' with ID: {project_id}")
+
+            # Optionally create GitLab repository
+            if setup_repo:
+                try:
+                    repo_service = RepoService(project_id, str(Path.cwd()))
+                    created = repo_service.create_repo()
+                    if created:
+                        logger.success(f"Created GitLab repository for project '{name}'")
+                    else:
+                        logger.info(f"GitLab repository already exists for project '{name}'")
+                except Exception as e:
+                    logger.warning(f"Failed to create GitLab repository: {str(e)}")
+                    # Don't fail the entire operation if repo creation fails
+
+            return project_id
+
+        except Exception as e:
+            if "unique_user_project_name" in str(e):
+                raise ValueError(f"Project '{name}' already exists for this user")
+            raise ValueError(f"Failed to create project: {str(e)}")
 
     def ds_list(self) -> List[Dict[str, str]]:
         """
@@ -208,76 +256,19 @@ class ProjectService:
 
     def project_init(self) -> None:
         """
-        Initialize project with git repository and mark as initialized.
+        Initialize project with git repository using RepoService.
 
         Raises:
             ValueError: If git operations fail
         """
-        cwd = Path.cwd()
-
         try:
-            # Initialize git repository if not already exists
-            if not (cwd / '.git').exists():
-                subprocess.run(['git', 'init'], cwd=cwd, check=True, capture_output=True)
-                logger.success("Initialized git repository")
+            repo_service = RepoService(self.project_id, str(Path.cwd()))
 
-                # Create default .gitignore
-                gitignore_content = """# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+            # Ensure repo exists locally (clone if needed, pull if exists)
+            repo_path = repo_service.ensure_repo()
 
-# Virtual environments
-venv/
-env/
-ENV/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Project specific
-.oryxforge
-data/
-*.log
-"""
-                (cwd / '.gitignore').write_text(gitignore_content)
-                logger.success("Created .gitignore file")
-
-                # Initial commit
-                subprocess.run(['git', 'add', '.'], cwd=cwd, check=True, capture_output=True)
-                subprocess.run(['git', 'commit', '-m', 'Initial commit'], cwd=cwd, check=True, capture_output=True)
-                logger.success("Created initial commit")
-
-            # Mark project as initialized in database (add initialized field if needed)
-            # For now, we'll assume project is initialized if this method completes successfully
             logger.success(f"Project {self.project_id} initialized successfully")
 
-        except subprocess.CalledProcessError as e:
-            raise ValueError(f"Git operation failed: {e.stderr.decode() if e.stderr else str(e)}")
         except Exception as e:
             raise ValueError(f"Project initialization failed: {str(e)}")
 
@@ -417,31 +408,6 @@ data/
         except Exception:
             return False
 
-    def git_pull(self, target_directory: str) -> None:
-        """
-        Pull git repository to target directory.
-
-        Args:
-            target_directory: Directory to pull repository into
-
-        Raises:
-            ValueError: If git operations fail
-        """
-        target_path = Path(target_directory)
-        target_path.mkdir(parents=True, exist_ok=True)
-
-        try:
-            # For now, this is a placeholder - would need git URL from project config
-            # Since we don't have git URL in the current schema, we'll just ensure
-            # the directory exists and is a git repository
-            if not (target_path / '.git').exists():
-                subprocess.run(['git', 'init'], cwd=target_path, check=True, capture_output=True)
-                logger.success(f"Initialized git repository in {target_path}")
-            else:
-                logger.info(f"Git repository already exists in {target_path}")
-
-        except subprocess.CalledProcessError as e:
-            raise ValueError(f"Git operation failed: {e.stderr.decode() if e.stderr else str(e)}")
 
     def is_initialized(self) -> bool:
         """
@@ -517,7 +483,7 @@ data/
         print("\nAvailable datasets:")
         print("=" * 50)
         for i, dataset in enumerate(datasets, 1):
-            print(f"{i:2d}. {dataset['name']} (ID: {dataset['id'][:8]}...)")
+            print(f"{i:2d}. {dataset['name']} (ID: {dataset['id']})")
 
         while True:
             try:
@@ -554,7 +520,7 @@ data/
         print("\nAvailable datasheets:")
         print("=" * 50)
         for i, sheet in enumerate(sheets, 1):
-            print(f"{i:2d}. {sheet['name']} (ID: {sheet['id'][:8]}...)")
+            print(f"{i:2d}. {sheet['name']} (ID: {sheet['id']})")
 
         while True:
             try:

@@ -4,8 +4,11 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from configobj import ConfigObj
-from supabase import create_client, Client
+from supabase import Client
 from loguru import logger
+from .utils import init_supabase_client
+from .repo_service import RepoService
+from .project_service import ProjectService
 
 
 class CLIService:
@@ -33,21 +36,11 @@ class CLIService:
             self.user_id = config['userid']
 
         # Initialize Supabase client
-        self.supabase_client = self._init_supabase_client()
+        self.supabase_client = init_supabase_client()
 
         # Validate user exists
         self._validate_user()
 
-    def _init_supabase_client(self) -> Client:
-        """Initialize Supabase client with credentials."""
-        # Try to get credentials from environment or config
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_ANON_KEY')
-
-        if not supabase_url or not supabase_key:
-            raise ValueError("Supabase credentials not found. Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.")
-
-        return create_client(supabase_url, supabase_key)
 
     def _validate_user(self) -> None:
         """Validate that user exists in auth.users table."""
@@ -144,7 +137,7 @@ class CLIService:
         # Create a temporary instance to validate user
         temp_service = CLIService.__new__(CLIService)
         temp_service.user_id = user_id
-        temp_service.supabase_client = self._init_supabase_client()
+        temp_service.supabase_client = init_supabase_client()
         temp_service._validate_user()
 
         # Create config directory if it doesn't exist
@@ -166,12 +159,13 @@ class CLIService:
 
         logger.success(f"User ID {user_id} saved to {self.config_file}")
 
-    def projects_create(self, name: str) -> str:
+    def projects_create(self, name: str, setup_repo: bool = True) -> str:
         """
         Create a new project for the current user.
 
         Args:
             name: Project name (must be unique for user)
+            setup_repo: Whether to create GitLab repository (default: True)
 
         Returns:
             str: Created project ID
@@ -179,27 +173,7 @@ class CLIService:
         Raises:
             ValueError: If project name already exists for user
         """
-        try:
-            response = (
-                self.supabase_client.table("projects")
-                .insert({
-                    "name": name,
-                    "user_owner": self.user_id
-                })
-                .execute()
-            )
-
-            if not response.data:
-                raise ValueError("Failed to create project")
-
-            project_id = response.data[0]['id']
-            logger.success(f"Created project '{name}' with ID: {project_id}")
-            return project_id
-
-        except Exception as e:
-            if "unique_user_project_name" in str(e):
-                raise ValueError(f"Project '{name}' already exists for this user")
-            raise ValueError(f"Failed to create project: {str(e)}")
+        return ProjectService.create_project(name, self.user_id, setup_repo)
 
     def project_exists(self, project_id: str) -> bool:
         """
@@ -377,7 +351,7 @@ class CLIService:
         print("\nAvailable projects:")
         print("=" * 50)
         for i, project in enumerate(projects, 1):
-            print(f"{i:2d}. {project['name']} (ID: {project['id'][:8]}...)")
+            print(f"{i:2d}. {project['name']} (ID: {project['id']})")
 
         while True:
             try:
@@ -392,3 +366,142 @@ class CLIService:
                     print(f"Invalid selection. Please enter 1-{len(projects)}")
             except (ValueError, KeyboardInterrupt):
                 raise ValueError("Project selection cancelled")
+
+    def repo_push(self, message: str, project_id: str = None) -> str:
+        """
+        Push changes to GitLab repository.
+
+        Args:
+            message: Commit message
+            project_id: Project ID (if None, use active project)
+
+        Returns:
+            str: Commit hash
+
+        Raises:
+            ValueError: If project not found or push fails
+        """
+        if not project_id:
+            active = self.get_active()
+            project_id = active.get('project_id')
+            if not project_id:
+                raise ValueError("No project ID provided and no active project set")
+
+        if not self.project_exists(project_id):
+            raise ValueError(f"Project {project_id} not found or access denied")
+
+        try:
+            repo_service = RepoService(project_id, str(self.cwd))
+            commit_hash = repo_service.push(message)
+            logger.success(f"Changes pushed successfully: {commit_hash}")
+            return commit_hash
+        except Exception as e:
+            raise ValueError(f"Failed to push changes: {str(e)}")
+
+    def repo_pull(self, project_id: str = None) -> None:
+        """
+        Pull latest changes from GitLab repository.
+
+        Args:
+            project_id: Project ID (if None, use active project)
+
+        Raises:
+            ValueError: If project not found or pull fails
+        """
+        if not project_id:
+            active = self.get_active()
+            project_id = active.get('project_id')
+            if not project_id:
+                raise ValueError("No project ID provided and no active project set")
+
+        if not self.project_exists(project_id):
+            raise ValueError(f"Project {project_id} not found or access denied")
+
+        try:
+            repo_service = RepoService(project_id, str(self.cwd))
+            repo_service.pull()
+            logger.success("Repository updated successfully")
+        except Exception as e:
+            raise ValueError(f"Failed to pull changes: {str(e)}")
+
+    def repo_status(self, project_id: str = None) -> Dict[str, bool]:
+        """
+        Get repository status information.
+
+        Args:
+            project_id: Project ID (if None, use active project)
+
+        Returns:
+            Dict with status information
+
+        Raises:
+            ValueError: If project not found
+        """
+        if not project_id:
+            active = self.get_active()
+            project_id = active.get('project_id')
+            if not project_id:
+                raise ValueError("No project ID provided and no active project set")
+
+        if not self.project_exists(project_id):
+            raise ValueError(f"Project {project_id} not found or access denied")
+
+        try:
+            repo_service = RepoService(project_id, str(self.cwd))
+
+            status = {
+                'exists_locally': repo_service.repo_exists_locally(),
+                'exists_on_gitlab': repo_service._repo_exists_on_gitlab()
+            }
+
+            return status
+        except Exception as e:
+            raise ValueError(f"Failed to get repository status: {str(e)}")
+
+    def admin_pull(self, project_id: str, working_dir: str = None) -> str:
+        """
+        Pull project repository and activate it.
+
+        Args:
+            project_id: Project ID to pull and activate
+            working_dir: Working directory (if None, use current directory)
+
+        Returns:
+            str: Path to repository
+
+        Raises:
+            ValueError: If project not found or operations fail
+        """
+        if not self.project_exists(project_id):
+            raise ValueError(f"Project {project_id} not found or access denied")
+
+        # Use provided working directory or current directory
+        target_dir = Path(working_dir) if working_dir else self.cwd
+
+        try:
+            # Initialize project service with target directory
+            project_service = ProjectService(project_id, self.user_id)
+
+            # Create repo service with target directory
+            repo_service = RepoService(project_id, str(target_dir))
+
+            # Ensure repository exists locally (clone if missing, pull if exists)
+            repo_path = repo_service.ensure_repo()
+
+            # Activate the project
+            # Update CLI service working directory to match repository location
+            old_cwd = self.cwd
+            self.cwd = Path(repo_path)
+
+            try:
+                self.project_activate(project_id)
+            finally:
+                # Restore original cwd if activation failed
+                if old_cwd != Path(repo_path):
+                    self.cwd = old_cwd
+
+            logger.success(f"Project {project_id} pulled and activated at {repo_path}")
+            return repo_path
+
+        except Exception as e:
+            raise ValueError(f"Failed to pull and activate project: {str(e)}")

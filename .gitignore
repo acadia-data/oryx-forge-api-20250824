@@ -9,6 +9,8 @@ tests/tmp*.py
 tests-data/
 local.py
 ui/
+tasks/
+temp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

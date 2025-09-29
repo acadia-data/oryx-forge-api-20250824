@@ -6,6 +6,21 @@ import re
 import subprocess
 import tempfile
 from loguru import logger
+from pydantic import BaseModel, ValidationError, field_validator
+from typing import Optional
+
+
+class InputSchema(BaseModel):
+    """Schema for input dependencies."""
+    dataset: Optional[str] = None
+    sheet: str
+
+    @field_validator('sheet')
+    @classmethod
+    def sheet_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError('sheet cannot be empty')
+        return v
 
 
 class WorkflowService:
@@ -246,6 +261,82 @@ pd.set_option('display.max_columns', None)
 
         return clean_inputs
 
+    def _process_inputs(self, inputs: list[dict] | list[str] | None, current_dataset: str = None) -> tuple[list[str], list[str], dict[str, str]]:
+        """Process and validate inputs, return (class_names, datasets_to_import, metadata).
+
+        Args:
+            inputs: List of input specifications. Can be:
+                    - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
+                    - List of strings: ['Hpi', 'Another'] (legacy format, assumes same dataset)
+                    - None
+            current_dataset: The dataset we're generating code for (to avoid self-imports)
+
+        Returns:
+            Tuple of (class_names, datasets_to_import, metadata) where:
+            - class_names: List of class references for decorator (e.g., ['sources.Hpi', 'Tasks2'])
+            - datasets_to_import: List of dataset names to import (excluding current_dataset)
+            - metadata: Dict mapping string key to actual class reference (e.g., {'sources.Hpi': 'sources.Hpi'})
+        """
+        if not inputs:
+            return [], [], {}
+
+        # Handle legacy format (list of strings) - convert to dict format
+        if inputs and isinstance(inputs[0], str):
+            logger.info("Legacy inputs format detected (list of strings). Converting to dict format.")
+            # Convert to dict format: ['Task1', 'Task2'] -> [{'dataset': current_dataset, 'sheet': 'Task1'}, ...]
+            inputs = [{'dataset': current_dataset, 'sheet': sheet} for sheet in inputs]
+
+        # Validate using pydantic
+        validated_inputs = []
+        try:
+            for inp in inputs:
+                validated = InputSchema(**inp)
+                validated_inputs.append(validated)
+        except ValidationError as e:
+            raise ValueError(f"Invalid inputs schema: {e}")
+
+        # Validate that datasets and sheets exist
+        available_datasets = self.list_datasets()
+
+        class_names = []
+        datasets_to_import = set()
+        metadata = {}
+
+        for inp in validated_inputs:
+            input_dataset = self._sanitize_dataset_name(inp.dataset) if inp.dataset else None
+            input_sheet = self._sanitize_sheet_name(inp.sheet)
+
+            # Validate dataset exists
+            if input_dataset and input_dataset not in available_datasets:
+                raise ValueError(f"Input dataset '{input_dataset}' does not exist. Available datasets: {available_datasets}")
+
+            # Validate sheet exists in dataset
+            sheets_in_dataset = self.list_sheets_by_dataset(input_dataset)
+            if input_sheet not in sheets_in_dataset:
+                dataset_display = input_dataset if input_dataset else "tasks/__init__.py"
+                raise ValueError(f"Input sheet '{input_sheet}' does not exist in {dataset_display}. Available sheets: {sheets_in_dataset}")
+
+            # Build class reference
+            # Always use the full qualified name in the metadata key
+            dataset_for_key = input_dataset if input_dataset else current_dataset
+            if dataset_for_key:
+                metadata_key = f"{dataset_for_key}.{input_sheet}"
+            else:
+                metadata_key = input_sheet
+
+            if input_dataset and input_dataset != current_dataset:
+                # Different dataset - need qualified name and import
+                class_ref = f"{input_dataset}.{input_sheet}"
+                class_names.append(class_ref)
+                datasets_to_import.add(input_dataset)
+                metadata[metadata_key] = class_ref
+            else:
+                # Same dataset or no dataset - use simple name (no import needed)
+                class_names.append(input_sheet)
+                metadata[metadata_key] = input_sheet
+
+        return class_names, list(datasets_to_import), metadata
+
     def _auto_clean_names(self, dataset: str, sheet: str) -> tuple[str, str]:
         """Auto-clean both dataset and sheet names, log changes."""
         original_dataset, original_sheet = dataset, sheet
@@ -309,8 +400,11 @@ pd.set_option('display.max_columns', None)
             # Sanitize method name to be valid Python identifier
             clean_method_name = self._sanitize_method_name(method_name)
 
+            # Prepend data = self.inputLoad() to method code
+            method_code_with_load = f"data = self.inputLoad()\n{method_code}"
+
             method_source = f"""    def {clean_method_name}(self):
-{textwrap.indent(method_code, '        ')}"""
+{textwrap.indent(method_code_with_load, '        ')}"""
             methods.append(method_source)
 
         return "\n\n" + "\n\n".join(methods)
@@ -330,18 +424,21 @@ pd.set_option('display.max_columns', None)
                 "Example: df_out = pd.DataFrame({'data': [1, 2, 3]})"
             )
 
-    def _generate_class_source(self, sheet: str, code: dict[str, str], inputs: list[str]) -> str:
+    def _generate_class_source(self, sheet: str, code: dict[str, str], inputs: list[str], inputs_metadata: dict[str, str] = None) -> str:
         """Generate source code for a sheet class.
 
         Args:
             sheet: Class name
             code: Dict of {method_name: method_code}. Must include 'run' key.
-            inputs: List of input sheet names
+            inputs: List of input class references (e.g., ['sources.Hpi', 'Task2'])
+            inputs_metadata: Optional dict mapping class reference to its actual reference (for decorator dict format)
         """
         decorator_str = ""
         if inputs:
-            inputs_str = ", ".join(inputs)
-            decorator_str = f"@d6tflow.requires({inputs_str})\n"
+            # Build decorator with metadata dict format: @d6tflow.requires({'sources.Hpi': sources.Hpi})
+            decorator_items = [f"'{key}': {value}" for key, value in inputs_metadata.items()]
+            decorator_dict = "{" + ", ".join(decorator_items) + "}"
+            decorator_str = f"@d6tflow.requires({decorator_dict})\n"
 
         # Extract run method code and ensure it has self.save(df_out)
         if 'run' not in code:
@@ -350,7 +447,9 @@ pd.set_option('display.max_columns', None)
         # Validate that run code includes df_out
         self._validate_run_code(code['run'])
 
-        run_code = self._ensure_save_statement(code['run'])
+        # Prepend data = self.inputLoad() to run code
+        run_code_with_load = f"data = self.inputLoad()\n{code['run']}"
+        run_code = self._ensure_save_statement(run_code_with_load)
 
         # Generate additional methods (all methods except 'run')
         other_methods = {k: v for k, v in code.items() if k != 'run'}
@@ -379,18 +478,22 @@ pd.set_option('display.max_columns', None)
 
     # ---------- CRUD Methods ----------
 
-    def create(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[str] = None, imports: str = None):
+    def create(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
         """Create a new sheet class (fails if already exists).
 
         Args:
             sheet: Class name
             code: Dict of {method_name: method_code}. Must include 'run' key.
             dataset: Dataset name (file to write to)
-            inputs: List of input sheet dependencies
+            inputs: List of input sheet dependencies. Can be:
+                    - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
+                    - List of strings: ['Hpi', 'Another'] (legacy format)
             imports: Custom imports string
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
-        inputs = self._sanitize_inputs(inputs or [])
+
+        # Process inputs: validate, transform, and get datasets to import
+        class_names, datasets_to_import, inputs_metadata = self._process_inputs(inputs, dataset_clean)
 
         # Load existing file or create new tree
         if filename.exists():
@@ -401,6 +504,11 @@ pd.set_option('display.max_columns', None)
         # Ensure base imports first
         self._ensure_imports(tree)
 
+        # Import required datasets from inputs
+        for dataset_name in datasets_to_import:
+            dataset_import = f"import {self.base_module}.{dataset_name}"
+            self._merge_imports(tree, dataset_import)
+
         # Add custom imports if provided
         if imports:
             self._merge_imports(tree, imports)
@@ -408,7 +516,7 @@ pd.set_option('display.max_columns', None)
         if self._find_class(tree, sheet_clean):
             raise ValueError(f"Class {sheet_clean} already exists in {dataset_clean}")
 
-        class_source = self._generate_class_source(sheet_clean, code, inputs)
+        class_source = self._generate_class_source(sheet_clean, code, class_names, inputs_metadata if inputs_metadata else None)
         class_ast = ast.parse(class_source)
         class_def = class_ast.body[0]
 
@@ -418,14 +526,16 @@ pd.set_option('display.max_columns', None)
         logger.success(status_msg)
         return status_msg
 
-    def upsert(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[str] = None, imports: str = None):
+    def upsert(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
         """Create a new sheet class or update if it already exists (upsert).
 
         Args:
             sheet: Class name
             code: Dict of {method_name: method_code}. Must include 'run' key.
             dataset: Dataset name (file to write to)
-            inputs: List of input sheet dependencies
+            inputs: List of input sheet dependencies. Can be:
+                    - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
+                    - List of strings: ['Hpi', 'Another'] (legacy format)
             imports: Custom imports string
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
@@ -441,7 +551,7 @@ pd.set_option('display.max_columns', None)
         # Create new class
         return self.create(sheet=sheet_clean, code=code, dataset=dataset_clean, inputs=inputs, imports=imports)
 
-    def upsert_run(self, sheet: str, code: str, dataset: str = None, inputs: list[str] = None, imports: str = None):
+    def upsert_run(self, sheet: str, code: str, dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
         """Convenience function to upsert just the run method.
 
         Args:
@@ -457,23 +567,24 @@ pd.set_option('display.max_columns', None)
         """
         return self.upsert(sheet=sheet, code={'run': code}, dataset=dataset, inputs=inputs, imports=imports)
 
-    def upsert_eda(self, sheet: str, code: str, dataset: str = None, imports: str = None):
+    def upsert_eda(self, sheet: str, code: str, dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
         """Convenience function to upsert just the eda method.
 
         Args:
             sheet: Class name
             code: Code for the eda() method (as string)
             dataset: Dataset name (file to write to)
+            inputs: List of input sheet dependencies
             imports: Custom imports string
         """
         # Try to preserve the existing run method if sheet exists
         try:
             existing_run = self.read(sheet, dataset=dataset, method='run')
-            return self.upsert(sheet=sheet, code={'run': existing_run, 'eda': code}, dataset=dataset, imports=imports)
+            return self.upsert(sheet=sheet, code={'run': existing_run, 'eda': code}, dataset=dataset, inputs=inputs, imports=imports)
         except ValueError:
             # Sheet doesn't exist yet, create with a default run method
             default_run = "df_out = None"
-            return self.upsert(sheet=sheet, code={'run': default_run, 'eda': code}, dataset=dataset, imports=imports)
+            return self.upsert(sheet=sheet, code={'run': default_run, 'eda': code}, dataset=dataset, inputs=inputs, imports=imports)
 
     def read(self, sheet: str, dataset: str = None, method: str = None) -> str:
         """Return the source code for a given class or specific method body.
@@ -504,7 +615,13 @@ pd.set_option('display.max_columns', None)
                     body_code = []
                     for stmt in node.body:
                         body_code.append(ast.unparse(stmt))
-                    return '\n'.join(body_code)
+                    code = '\n'.join(body_code)
+
+                    # Strip the auto-added data = self.inputLoad() line if present
+                    if code.startswith('data = self.inputLoad()\n'):
+                        code = code[len('data = self.inputLoad()\n'):]
+
+                    return code
             raise ValueError(f"{method}() method not found in {sheet_clean}")
 
         return ast.unparse(cls)
@@ -526,7 +643,7 @@ pd.set_option('display.max_columns', None)
         sheet: str,
         dataset: str = None,
         new_code: dict[str, str] = None,
-        new_inputs: list[str] = None,
+        new_inputs: list[dict] | list[str] = None,
         new_imports: str = None,
     ):
         """
@@ -535,12 +652,18 @@ pd.set_option('display.max_columns', None)
         Args:
             sheet: Class name
             new_code: Dict of {method_name: method_code} to replace. Can include 'run' and other methods.
-            new_inputs: replace @d6tflow.requires(...)
+            new_inputs: replace @d6tflow.requires(...). Can be:
+                        - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
+                        - List of strings: ['Hpi', 'Another'] (legacy format)
             new_imports: add new imports to the file
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
+
+        # Process inputs if provided
+        class_names = None
+        inputs_metadata = None
         if new_inputs is not None:
-            new_inputs = self._sanitize_inputs(new_inputs)
+            class_names, datasets_to_import, inputs_metadata = self._process_inputs(new_inputs, dataset_clean)
 
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
@@ -550,6 +673,12 @@ pd.set_option('display.max_columns', None)
         if not cls:
             raise ValueError(f"Class {sheet_clean} not found in {self._get_dataset_display(dataset_clean)}")
 
+        # Import required datasets from inputs
+        if new_inputs is not None:
+            for dataset_name in datasets_to_import:
+                dataset_import = f"import {self.base_module}.{dataset_name}"
+                self._merge_imports(tree, dataset_import)
+
         # Add new imports if provided
         if new_imports:
             self._merge_imports(tree, new_imports)
@@ -557,7 +686,12 @@ pd.set_option('display.max_columns', None)
         if new_code:
             # Handle 'run' method separately
             if 'run' in new_code:
-                run_code = self._ensure_save_statement(new_code['run'])
+                # Validate that run code includes df_out
+                self._validate_run_code(new_code['run'])
+
+                # Prepend data = self.inputLoad() to run code
+                run_code_with_load = f"data = self.inputLoad()\n{new_code['run']}"
+                run_code = self._ensure_save_statement(run_code_with_load)
                 for node in cls.body:
                     if isinstance(node, ast.FunctionDef) and node.name == "run":
                         node.body = ast.parse(textwrap.dedent(run_code)).body
@@ -579,9 +713,12 @@ pd.set_option('display.max_columns', None)
                 for method_name, method_code in other_methods.items():
                     clean_method_name = self._sanitize_method_name(method_name)
 
+                    # Prepend data = self.inputLoad() to method code
+                    method_code_with_load = f"data = self.inputLoad()\n{method_code}"
+
                     # Create method AST
                     method_ast = ast.parse(f"""def {clean_method_name}(self):
-{textwrap.indent(method_code, '    ')}""").body[0]
+{textwrap.indent(method_code_with_load, '    ')}""").body[0]
 
                     cls.body.append(method_ast)
 
@@ -597,18 +734,19 @@ pd.set_option('display.max_columns', None)
                 )
             ]
             # Add new decorator if inputs exist
-            if new_inputs:
-                inputs_str = ", ".join(new_inputs)
-                # Create decorator AST manually since we need just the decorator
-                decorator_ast = ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name("d6tflow", ast.Load()),
-                        attr="requires",
-                        ctx=ast.Load()
-                    ),
-                    args=[ast.Name(inp, ast.Load()) for inp in new_inputs],
-                    keywords=[]
-                )
+            if class_names:
+                # Build decorator string with metadata dict format
+                decorator_items = [f"'{key}': {value}" for key, value in inputs_metadata.items()]
+                decorator_dict = "{" + ", ".join(decorator_items) + "}"
+                decorator_code = f"@d6tflow.requires({decorator_dict})"
+
+                # Parse decorator and extract the Call node
+                decorator_module = ast.parse(f"""
+{decorator_code}
+class Temp: pass
+""")
+                temp_class = decorator_module.body[0]
+                decorator_ast = temp_class.decorator_list[0]
                 cls.decorator_list.insert(0, decorator_ast)
 
         self._save_file(filename, tree)

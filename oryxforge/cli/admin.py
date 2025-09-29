@@ -148,9 +148,9 @@ def pull_project(project_id: Optional[str], target_dir: str):
 
         # Auto-activate default dataset and first sheet
         try:
-            default_dataset_id = project_service.get_default_dataset_id()
+            default_dataset_id = project_service._get_default_dataset_id()
             cli_service_in_project.dataset_activate(default_dataset_id)
-            click.echo(f"✅ Activated default dataset: scratchpad")
+            click.echo(f"✅ Activated default dataset: exploration")
 
             # Get first sheet in default dataset
             first_sheet_id = project_service.get_first_sheet_id(default_dataset_id)

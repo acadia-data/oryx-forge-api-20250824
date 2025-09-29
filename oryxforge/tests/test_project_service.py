@@ -243,25 +243,6 @@ class TestProjectService:
         assert len(result) == 0
 
 
-    def test_ds_init_success(self, project_service, test_dataset_name):
-        """Test successful dataset initialization."""
-        # Create a dataset first
-        dataset_id = project_service.ds_create(test_dataset_name)
-
-        try:
-            # Initialize the dataset - should not raise an exception
-            project_service.ds_init(dataset_id)
-        finally:
-            # Clean up
-            try:
-                project_service.supabase_client.table("datasets").delete().eq("id", dataset_id).execute()
-            except Exception:
-                pass
-
-    def test_ds_init_not_found(self, project_service):
-        """Test dataset initialization with non-existing dataset."""
-        with pytest.raises(ValueError, match="Dataset .* not found"):
-            project_service.ds_init('non-existent-dataset-id')
 
     def test_ds_exists_true(self, project_service, test_dataset_name):
         """Test ds_exists returns True for existing dataset."""
@@ -297,59 +278,6 @@ class TestProjectService:
             # Expected - different user shouldn't have access
             pass
 
-    def test_sheet_init_success(self, project_service, test_dataset_name, test_sheet_name):
-        """Test successful datasheet initialization."""
-        # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
-
-        try:
-            # Check if GCS is available before testing initialization
-            if project_service.gcs is None:
-                pytest.skip("GCS not available for integration testing")
-
-            # Initialize the sheet
-            project_service.sheet_init(sheet_id)
-
-            # Verify the sheet was updated in database
-            response = project_service.supabase_client.table("datasheets").select("uri").eq("id", sheet_id).execute()
-            assert response.data
-            assert response.data[0]['uri'] is not None
-
-        finally:
-            # Clean up
-            try:
-                project_service.supabase_client.table("datasheets").delete().eq("dataset_id", dataset_id).execute()
-                project_service.supabase_client.table("datasets").delete().eq("id", dataset_id).execute()
-            except Exception:
-                pass
-
-    def test_sheet_init_not_found(self, project_service):
-        """Test datasheet initialization with non-existing sheet."""
-        with pytest.raises(ValueError, match="Datasheet .* not found"):
-            project_service.sheet_init('non-existent-sheet-id')
-
-    def test_sheet_init_no_gcs(self, project_service, test_dataset_name, test_sheet_name):
-        """Test datasheet initialization without GCS."""
-        # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
-
-        try:
-            # Disable GCS
-            original_gcs = project_service.gcs
-            project_service.gcs = None
-
-            with pytest.raises(ValueError, match="GCS filesystem not available"):
-                project_service.sheet_init(sheet_id)
-        finally:
-            # Restore GCS and clean up
-            project_service.gcs = original_gcs
-            try:
-                project_service.supabase_client.table("datasheets").delete().eq("dataset_id", dataset_id).execute()
-                project_service.supabase_client.table("datasets").delete().eq("id", dataset_id).execute()
-            except Exception:
-                pass
 
     def test_sheet_exists_true(self, project_service, test_dataset_name, test_sheet_name):
         """Test sheet_exists returns True for existing sheet."""
@@ -388,39 +316,39 @@ class TestProjectService:
 
     def test_get_default_dataset_id_success(self, project_service):
         """Test successful default dataset retrieval."""
-        # Create a scratchpad dataset
-        scratchpad_id = project_service.ds_create('scratchpad')
+        # Create an exploration dataset
+        exploration_id = project_service.ds_create('exploration')
 
         try:
-            result = project_service.get_default_dataset_id()
-            assert result == scratchpad_id
+            result = project_service._get_default_dataset_id()
+            assert result == exploration_id
         except ValueError as e:
             # If test fails, clean up and re-raise
             try:
-                project_service.supabase_client.table("datasets").delete().eq("id", scratchpad_id).execute()
+                project_service.supabase_client.table("datasets").delete().eq("id", exploration_id).execute()
             except Exception:
                 pass
             raise e
         finally:
             # Clean up
             try:
-                project_service.supabase_client.table("datasets").delete().eq("id", scratchpad_id).execute()
+                project_service.supabase_client.table("datasets").delete().eq("id", exploration_id).execute()
             except Exception:
                 pass
 
     def test_get_default_dataset_id_not_found(self, project_service):
         """Test default dataset retrieval when not found."""
-        # Check if scratchpad already exists and remove it temporarily
+        # Check if exploration already exists and remove it temporarily
         existing_datasets = project_service.ds_list()
-        scratchpad_datasets = [ds for ds in existing_datasets if ds['name'] == 'scratchpad']
+        exploration_datasets = [ds for ds in existing_datasets if ds['name'] == 'exploration']
 
-        if scratchpad_datasets:
-            # Skip this test if scratchpad already exists
-            pytest.skip("Scratchpad dataset already exists in test project")
+        if exploration_datasets:
+            # Skip this test if exploration already exists
+            pytest.skip("Exploration dataset already exists in test project")
         else:
             # Test the error case
-            with pytest.raises(ValueError, match="Scratchpad dataset not found"):
-                project_service.get_default_dataset_id()
+            with pytest.raises(ValueError, match="Exploration dataset not found"):
+                project_service._get_default_dataset_id()
 
     def test_get_first_sheet_id_success(self, project_service, test_dataset_name, test_sheet_name):
         """Test successful first sheet retrieval."""

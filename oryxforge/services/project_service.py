@@ -272,42 +272,6 @@ class ProjectService:
         except Exception as e:
             raise ValueError(f"Project initialization failed: {str(e)}")
 
-    def ds_init(self, dataset_id: str) -> None:
-        """
-        Initialize dataset with python module name.
-
-        Args:
-            dataset_id: Dataset ID to initialize
-
-        Raises:
-            ValueError: If dataset doesn't exist
-        """
-        if not self.ds_exists(dataset_id):
-            raise ValueError(f"Dataset {dataset_id} not found or access denied")
-
-        try:
-            # Get dataset name
-            response = (
-                self.supabase_client.table("datasets")
-                .select("name")
-                .eq("id", dataset_id)
-                .eq("user_owner", self.user_id)
-                .execute()
-            )
-            if not response.data:
-                raise ValueError(f"Dataset {dataset_id} not found")
-
-            dataset_name = response.data[0]['name']
-
-            # Create safe python module name
-            module_name = self.workflow_service._sanitize_dataset_name(dataset_name)
-
-            # Update dataset record with module name (add column if needed)
-            # For now, we'll just log the module name
-            logger.success(f"Dataset '{dataset_name}' initialized with module name: '{module_name}'")
-
-        except Exception as e:
-            raise ValueError(f"Failed to initialize dataset: {str(e)}")
 
     def ds_exists(self, dataset_id: str) -> bool:
         """
@@ -332,59 +296,6 @@ class ProjectService:
         except Exception:
             return False
 
-    def sheet_init(self, sheet_id: str) -> None:
-        """
-        Initialize datasheet with python class name and empty dataframe.
-
-        Args:
-            sheet_id: Datasheet ID to initialize
-
-        Raises:
-            ValueError: If datasheet doesn't exist or GCS operations fail
-        """
-        if not self.sheet_exists(sheet_id):
-            raise ValueError(f"Datasheet {sheet_id} not found or access denied")
-
-        if not self.gcs:
-            raise ValueError("GCS filesystem not available")
-
-        try:
-            # Get datasheet name
-            response = (
-                self.supabase_client.table("datasheets")
-                .select("name, dataset_id")
-                .eq("id", sheet_id)
-                .eq("user_owner", self.user_id)
-                .execute()
-            )
-            if not response.data:
-                raise ValueError(f"Datasheet {sheet_id} not found")
-
-            sheet_name = response.data[0]['name']
-            dataset_id = response.data[0]['dataset_id']
-
-            # Create safe python class name
-            class_name = self.workflow_service._sanitize_sheet_name(sheet_name)
-
-            # Create empty DataFrame with 1 column and 10 rows
-            df = pd.DataFrame({
-                'column_1': [None] * 10
-            })
-
-            # Save DataFrame to GCS
-            gcs_path = f"gcs://{self.gcs_bucket}/{self.project_id}/{dataset_id}/{sheet_name}.parquet"
-            with self.gcs.open(gcs_path, 'wb') as f:
-                df.to_parquet(f, index=False)
-
-            # Update datasheet record with URI
-            self.supabase_client.table("datasheets").update({
-                "uri": gcs_path
-            }).eq("id", sheet_id).execute()
-
-            logger.success(f"Datasheet '{sheet_name}' initialized with class name: '{class_name}' and saved to {gcs_path}")
-
-        except Exception as e:
-            raise ValueError(f"Failed to initialize datasheet: {str(e)}")
 
     def sheet_exists(self, sheet_id: str) -> bool:
         """
@@ -416,22 +327,26 @@ class ProjectService:
         Returns:
             bool: True if project is initialized
         """
-        # For now, we'll consider a project initialized if it exists
-        # In the future, this could check for specific fields or git repository
         try:
-            return self.project_id is not None and self.project_name is not None
+            # Check if project exists and has name
+            if self.project_id is None or self.project_name is None:
+                return False
+
+            # Check if GitLab repository exists
+            repo_service = RepoService(self.project_id, str(Path.cwd()))
+            return repo_service.repo_exists()
         except Exception:
             return False
 
-    def get_default_dataset_id(self) -> str:
+    def _get_default_dataset_id(self) -> str:
         """
-        Find "scratchpad" dataset for current project.
+        Find "exploration" dataset for current project.
 
         Returns:
-            str: Dataset ID for scratchpad dataset
+            str: Dataset ID for exploration dataset
 
         Raises:
-            ValueError: If scratchpad dataset not found
+            ValueError: If exploration dataset not found
         """
         try:
             response = (
@@ -439,11 +354,11 @@ class ProjectService:
                 .select("id")
                 .eq("project_id", self.project_id)
                 .eq("user_owner", self.user_id)
-                .eq("name", "scratchpad")
+                .eq("name", "exploration")
                 .execute()
             )
             if not response.data:
-                raise ValueError("Scratchpad dataset not found")
+                raise ValueError("Exploration dataset not found")
             return response.data[0]['id']
         except Exception as e:
             raise ValueError(f"Failed to find default dataset: {str(e)}")

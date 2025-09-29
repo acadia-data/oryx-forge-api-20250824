@@ -131,7 +131,11 @@ class WorkflowService:
 
     def _ensure_imports(self, tree):
         """Ensure required imports are present in the given AST tree."""
-        needed_imports_str = "import d6tflow\nimport pandas as pd"
+        needed_imports_str = """
+import d6tflow
+import pandas as pd
+pd.set_option('display.max_columns', None)
+"""
         self._merge_imports(tree, needed_imports_str)
 
     def _find_class(self, tree, sheet: str):
@@ -311,22 +315,50 @@ class WorkflowService:
 
         return "\n\n" + "\n\n".join(methods)
 
-    def _generate_class_source(self, sheet: str, code: str, inputs: list[str], code_methods: dict[str, str] = None) -> str:
-        """Generate source code for a sheet class."""
+    def _validate_run_code(self, code: str) -> None:
+        """Validate that run method code includes df_out assignment.
+
+        Args:
+            code: Run method code to validate
+
+        Raises:
+            ValueError: If df_out is not found in the code
+        """
+        if 'df_out' not in code:
+            raise ValueError(
+                "Run method code must assign results to 'df_out'. "
+                "Example: df_out = pd.DataFrame({'data': [1, 2, 3]})"
+            )
+
+    def _generate_class_source(self, sheet: str, code: dict[str, str], inputs: list[str]) -> str:
+        """Generate source code for a sheet class.
+
+        Args:
+            sheet: Class name
+            code: Dict of {method_name: method_code}. Must include 'run' key.
+            inputs: List of input sheet names
+        """
         decorator_str = ""
         if inputs:
             inputs_str = ", ".join(inputs)
             decorator_str = f"@d6tflow.requires({inputs_str})\n"
 
-        # Ensure code has self.save(df_out) at the end
-        code = self._ensure_save_statement(code)
+        # Extract run method code and ensure it has self.save(df_out)
+        if 'run' not in code:
+            raise ValueError("code dict must include 'run' key")
 
-        # Generate additional methods
-        additional_methods = self._generate_additional_methods(code_methods or {})
+        # Validate that run code includes df_out
+        self._validate_run_code(code['run'])
+
+        run_code = self._ensure_save_statement(code['run'])
+
+        # Generate additional methods (all methods except 'run')
+        other_methods = {k: v for k, v in code.items() if k != 'run'}
+        additional_methods = self._generate_additional_methods(other_methods)
 
         class_source = f"""{decorator_str}class {sheet}(d6tflow.tasks.TaskPqPandas):
     def run(self):
-{textwrap.indent(code, '        ')}{additional_methods}"""
+{textwrap.indent(run_code, '        ')}{additional_methods}"""
         return class_source
 
     # ---------- Internal Helpers ----------
@@ -347,8 +379,16 @@ class WorkflowService:
 
     # ---------- CRUD Methods ----------
 
-    def create(self, sheet: str, code: str, dataset: str = None, inputs: list[str] = None, imports: str = None, code_methods: dict[str, str] = None):
-        """Create a new sheet class (fails if already exists)."""
+    def create(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[str] = None, imports: str = None):
+        """Create a new sheet class (fails if already exists).
+
+        Args:
+            sheet: Class name
+            code: Dict of {method_name: method_code}. Must include 'run' key.
+            dataset: Dataset name (file to write to)
+            inputs: List of input sheet dependencies
+            imports: Custom imports string
+        """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
         inputs = self._sanitize_inputs(inputs or [])
 
@@ -368,7 +408,7 @@ class WorkflowService:
         if self._find_class(tree, sheet_clean):
             raise ValueError(f"Class {sheet_clean} already exists in {dataset_clean}")
 
-        class_source = self._generate_class_source(sheet_clean, code, inputs, code_methods)
+        class_source = self._generate_class_source(sheet_clean, code, inputs)
         class_ast = ast.parse(class_source)
         class_def = class_ast.body[0]
 
@@ -378,8 +418,16 @@ class WorkflowService:
         logger.success(status_msg)
         return status_msg
 
-    def upsert(self, sheet: str, code: str, dataset: str = None, inputs: list[str] = None, imports: str = None, code_methods: dict[str, str] = None):
-        """Create a new sheet class or update if it already exists (upsert)."""
+    def upsert(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[str] = None, imports: str = None):
+        """Create a new sheet class or update if it already exists (upsert).
+
+        Args:
+            sheet: Class name
+            code: Dict of {method_name: method_code}. Must include 'run' key.
+            dataset: Dataset name (file to write to)
+            inputs: List of input sheet dependencies
+            imports: Custom imports string
+        """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
 
         # Check if sheet already exists
@@ -388,56 +436,111 @@ class WorkflowService:
             existing_class = self._find_class(tree, sheet_clean)
             if existing_class:
                 # Update existing class
-                return self.update(sheet=sheet_clean, dataset=dataset_clean, new_code=code, new_inputs=inputs, new_imports=imports, new_code_methods=code_methods)
+                return self.update(sheet=sheet_clean, dataset=dataset_clean, new_code=code, new_inputs=inputs, new_imports=imports)
 
         # Create new class
-        return self.create(sheet=sheet_clean, code=code, dataset=dataset_clean, inputs=inputs, imports=imports, code_methods=code_methods)
+        return self.create(sheet=sheet_clean, code=code, dataset=dataset_clean, inputs=inputs, imports=imports)
 
-    def read(self, sheet: str, dataset: str = None, method_only: bool = True) -> str:
-        """Return the source code for a given class or just run() method body."""
+    def upsert_run(self, sheet: str, code: str, dataset: str = None, inputs: list[str] = None, imports: str = None):
+        """Convenience function to upsert just the run method.
+
+        Args:
+            sheet: Class name
+            code: Code for the run() method (as string). Must assign results to 'df_out'.
+                  Example: df_out = pd.DataFrame({'data': [1, 2, 3]})
+            dataset: Dataset name (file to write to)
+            inputs: List of input sheet dependencies
+            imports: Custom imports string
+
+        Raises:
+            ValueError: If code does not include 'df_out' assignment
+        """
+        return self.upsert(sheet=sheet, code={'run': code}, dataset=dataset, inputs=inputs, imports=imports)
+
+    def upsert_eda(self, sheet: str, code: str, dataset: str = None, imports: str = None):
+        """Convenience function to upsert just the eda method.
+
+        Args:
+            sheet: Class name
+            code: Code for the eda() method (as string)
+            dataset: Dataset name (file to write to)
+            imports: Custom imports string
+        """
+        # Try to preserve the existing run method if sheet exists
+        try:
+            existing_run = self.read(sheet, dataset=dataset, method='run')
+            return self.upsert(sheet=sheet, code={'run': existing_run, 'eda': code}, dataset=dataset, imports=imports)
+        except ValueError:
+            # Sheet doesn't exist yet, create with a default run method
+            default_run = "df_out = None"
+            return self.upsert(sheet=sheet, code={'run': default_run, 'eda': code}, dataset=dataset, imports=imports)
+
+    def read(self, sheet: str, dataset: str = None, method: str = None) -> str:
+        """Return the source code for a given class or specific method body.
+
+        Args:
+            sheet: Class name
+            dataset: Dataset name (file to read from)
+            method: Method name to read (e.g., 'run', 'eda'). If None, returns full class.
+
+        Returns:
+            Method body code if method specified, otherwise full class definition
+        """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
-        
+
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
-        
+
         tree = ast.parse(filename.read_text())
         cls = self._find_class(tree, sheet_clean)
         if not cls:
             raise ValueError(f"Class {sheet_clean} not found in {self._get_dataset_display(dataset_clean)}")
-        
-        if method_only:
-            # Find and return just run() method body
+
+        if method:
+            # Find and return specific method body
             for node in cls.body:
-                if isinstance(node, ast.FunctionDef) and node.name == "run":
+                if isinstance(node, ast.FunctionDef) and node.name == method:
                     # Return the method body as properly formatted code
                     body_code = []
                     for stmt in node.body:
                         body_code.append(ast.unparse(stmt))
                     return '\n'.join(body_code)
-            raise ValueError(f"run() method not found in {sheet_clean}")
-        
+            raise ValueError(f"{method}() method not found in {sheet_clean}")
+
         return ast.unparse(cls)
+
+    def read_run(self, sheet: str, dataset: str = None) -> str:
+        """Convenience function to read just the run method code.
+
+        Args:
+            sheet: Class name
+            dataset: Dataset name (file to read from)
+
+        Returns:
+            Run method body code
+        """
+        return self.read(sheet, dataset=dataset, method='run')
 
     def update(
         self,
         sheet: str,
         dataset: str = None,
-        new_code: str = None,
+        new_code: dict[str, str] = None,
         new_inputs: list[str] = None,
         new_imports: str = None,
-        new_code_methods: dict[str, str] = None,
     ):
         """
         Update an existing class.
-        - new_code: replace run() method body
-        - new_inputs: replace @d6tflow.requires(...)
-        - new_imports: add new imports to the file
-        - new_code_methods: replace all custom methods with new ones from dict
+
+        Args:
+            sheet: Class name
+            new_code: Dict of {method_name: method_code} to replace. Can include 'run' and other methods.
+            new_inputs: replace @d6tflow.requires(...)
+            new_imports: add new imports to the file
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
         if new_inputs is not None:
             new_inputs = self._sanitize_inputs(new_inputs)
-
 
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
@@ -452,15 +555,35 @@ class WorkflowService:
             self._merge_imports(tree, new_imports)
 
         if new_code:
-            # Ensure code has self.save(df_out) at the end
-            new_code = self._ensure_save_statement(new_code)
+            # Handle 'run' method separately
+            if 'run' in new_code:
+                run_code = self._ensure_save_statement(new_code['run'])
+                for node in cls.body:
+                    if isinstance(node, ast.FunctionDef) and node.name == "run":
+                        node.body = ast.parse(textwrap.dedent(run_code)).body
+                        break
+                else:
+                    raise ValueError(f"run() not found in {sheet_clean}")
 
-            for node in cls.body:
-                if isinstance(node, ast.FunctionDef) and node.name == "run":
-                    node.body = ast.parse(textwrap.dedent(new_code)).body
-                    break
-            else:
-                raise ValueError(f"run() not found in {sheet_clean}")
+            # Handle other methods
+            other_methods = {k: v for k, v in new_code.items() if k != 'run'}
+            if other_methods:
+                # Remove existing custom methods (keep only run, input, output, save)
+                standard_methods = {'run', 'input', 'output', 'save'}
+                cls.body = [
+                    node for node in cls.body
+                    if not (isinstance(node, ast.FunctionDef) and node.name not in standard_methods)
+                ]
+
+                # Add new methods
+                for method_name, method_code in other_methods.items():
+                    clean_method_name = self._sanitize_method_name(method_name)
+
+                    # Create method AST
+                    method_ast = ast.parse(f"""def {clean_method_name}(self):
+{textwrap.indent(method_code, '    ')}""").body[0]
+
+                    cls.body.append(method_ast)
 
         if new_inputs is not None:
             # Remove existing @d6tflow.requires decorators
@@ -487,24 +610,6 @@ class WorkflowService:
                     keywords=[]
                 )
                 cls.decorator_list.insert(0, decorator_ast)
-
-        if new_code_methods:
-            # Remove existing custom methods (keep only run, input, output, save)
-            standard_methods = {'run', 'input', 'output', 'save'}
-            cls.body = [
-                node for node in cls.body
-                if not (isinstance(node, ast.FunctionDef) and node.name not in standard_methods)
-            ]
-
-            # Add new methods
-            for method_name, method_code in new_code_methods.items():
-                clean_method_name = self._sanitize_method_name(method_name)
-
-                # Create method AST
-                method_ast = ast.parse(f"""def {clean_method_name}(self):
-{textwrap.indent(method_code, '    ')}""").body[0]
-
-                cls.body.append(method_ast)
 
         self._save_file(filename, tree)
         status_msg = f"Updated {sheet_clean} in {self._get_dataset_display(dataset_clean)}"
@@ -637,18 +742,136 @@ class WorkflowService:
     def preview_flow(self, sheet: str, dataset: str = None,
                     flow_params: dict = None, reset_sheets: list[str] = None) -> str:
         """Generate and execute a preview script for a d6tflow workflow."""
-        script = self.create_preview(sheet, dataset, flow_params, reset_sheets)
+        script = self.run_preview(sheet, dataset, flow_params, reset_sheets)
         return self.execute_preview(script)
 
-    def create_run(self, sheet: str, dataset: str = None,
-                  flow_params: dict = None, reset_sheets: list[str] = None) -> str:
-        """Generate a run script for a d6tflow workflow."""
-        return self._generate_flow_script(sheet, dataset, flow_params, reset_sheets, preview_only=False)
+    def _write_and_execute_script(self, script: str, file_out: str = None,
+                                   execute: bool = False, script_type: str = "script") -> str | dict:
+        """Helper method to write script to file and optionally execute it.
 
-    def create_preview(self, sheet: str, dataset: str = None,
-                      flow_params: dict = None, reset_sheets: list[str] = None) -> str:
-        """Generate a preview script for a d6tflow workflow."""
-        return self._generate_flow_script(sheet, dataset, flow_params, reset_sheets, preview_only=True)
+        Args:
+            script: The script content to write
+            file_out: File path to write the script to. Set to None to skip writing.
+            execute: If True, execute the script after generating it. Requires file_out to be set.
+            script_type: Description of script type for logging (e.g., "run", "preview", "task")
+
+        Returns:
+            If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
+            If file_out specified (no execute): str with file path written to
+            Otherwise: the script content
+        """
+        if file_out:
+            output_path = self.base_dir / file_out
+            output_path.write_text(script)
+            logger.info(f"Wrote {script_type} script to {output_path}")
+
+            if execute:
+                import subprocess
+                import sys
+                logger.info(f"Executing {output_path}")
+                result = subprocess.run(
+                    [sys.executable, str(output_path)],
+                    capture_output=True,
+                    text=True
+                )
+
+                if result.returncode == 0:
+                    logger.success(f"Successfully executed {output_path}")
+                else:
+                    logger.error(f"Execution failed with return code {result.returncode}")
+
+                return {
+                    'stdout': result.stdout,
+                    'stderr': result.stderr,
+                    'returncode': result.returncode
+                }
+            else:
+                return str(output_path)
+        elif execute:
+            raise ValueError("Cannot execute without file_out. Set file_out to a filename to execute.")
+
+        return script
+
+    def run_flow(self, sheet: str, dataset: str = None,
+                  flow_params: dict = None, reset_sheets: list[str] = None,
+                  file_out: str = "run_flow.py", execute: bool = False) -> str | dict:
+        """Generate a run script for a d6tflow workflow.
+
+        Args:
+            sheet: Sheet name
+            dataset: Dataset name
+            flow_params: Flow parameters dict
+            reset_sheets: List of sheets to reset
+            file_out: File path to write the script to. Defaults to 'run_flow.py'. Set to None to skip writing.
+            execute: If True, execute the script after generating it. Requires file_out to be set.
+
+        Returns:
+            If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
+            If file_out specified (no execute): str with file path written to
+            Otherwise: the script content
+        """
+        script = self._generate_flow_script(sheet, dataset, flow_params, reset_sheets, preview_only=False)
+        return self._write_and_execute_script(script, file_out, execute, "run")
+
+    def run_preview(self, sheet: str, dataset: str = None,
+                      flow_params: dict = None, reset_sheets: list[str] = None,
+                      file_out: str = "run_preview.py", execute: bool = False) -> str | dict:
+        """Generate a preview script for a d6tflow workflow.
+
+        Args:
+            sheet: Sheet name
+            dataset: Dataset name
+            flow_params: Flow parameters dict
+            reset_sheets: List of sheets to reset
+            file_out: File path to write the script to. Defaults to 'run_preview.py'. Set to None to skip writing.
+            execute: If True, execute the script after generating it. Requires file_out to be set.
+
+        Returns:
+            If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
+            If file_out specified (no execute): str with file path written to
+            Otherwise: the script content
+        """
+        script = self._generate_flow_script(sheet, dataset, flow_params, reset_sheets, preview_only=True)
+        return self._write_and_execute_script(script, file_out, execute, "preview")
+
+    def run_task(self, sheet: str, function: str, dataset: str = None,
+                  file_out: str = "run_task.py", execute: bool = False) -> str | dict:
+        """Generate a script to execute a specific function on a task class.
+
+        Args:
+            sheet: Sheet/Task class name
+            function: Function name to execute on the task
+            dataset: Dataset name (file to read from)
+            file_out: File path to write the script to. Defaults to 'run_task.py'. Set to None to skip writing.
+            execute: If True, execute the script after generating it. Requires file_out to be set.
+
+        Returns:
+            If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
+            If file_out specified (no execute): str with file path written to
+            Otherwise: the script content
+        """
+        dataset_clean, sheet_clean = self._validate_flow_task(sheet, dataset)
+
+        # Generate import statement
+        if dataset_clean is None:
+            import_line = f"import {self.base_module}"
+            task_call = f"{self.base_module}.{sheet_clean}().{function}()"
+        else:
+            import_line = f"import {self.base_module}.{dataset_clean}"
+            task_call = f"{self.base_module}.{dataset_clean}.{sheet_clean}().{function}()"
+
+        # Generate script
+        script = f"""import sys
+import os
+sys.path.insert(0, os.getcwd())
+
+{import_line}
+
+# {task_call}
+{task_call}
+"""
+
+        return self._write_and_execute_script(script, file_out, execute, "task")
 
     def execute_run(self, script: str) -> str:
         """Execute a run script using subprocess."""

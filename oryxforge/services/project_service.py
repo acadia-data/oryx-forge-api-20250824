@@ -129,12 +129,12 @@ class ProjectService:
         List all datasets for the current project.
 
         Returns:
-            List of dicts with dataset id and name
+            List of dicts with dataset id, name, and name_python
         """
         try:
             response = (
                 self.supabase_client.table("datasets")
-                .select("id, name")
+                .select("id, name, name_python")
                 .eq("project_id", self.project_id)
                 .eq("user_owner", self.user_id)
                 .order("created_at", desc=True)
@@ -229,12 +229,12 @@ class ProjectService:
             dataset_id: Dataset ID (if None, list all datasheets in project)
 
         Returns:
-            List of dicts with datasheet id, name, and dataset_id
+            List of dicts with datasheet id, name, name_python, and dataset_id
         """
         try:
             query = (
                 self.supabase_client.table("datasheets")
-                .select("id, name, dataset_id")
+                .select("id, name, name_python, dataset_id")
                 .eq("user_owner", self.user_id)
             )
 
@@ -520,3 +520,128 @@ class ProjectService:
 
         except Exception as e:
             raise ValueError(f"Failed to find datasheet '{name}': {str(e)}")
+
+    def get_dataset_by_id(self, dataset_id: str) -> Dict[str, str]:
+        """
+        Get dataset information by ID.
+
+        Args:
+            dataset_id: Dataset ID
+
+        Returns:
+            Dict with id, name, and name_python fields
+
+        Raises:
+            ValueError: If dataset not found or access denied
+        """
+        try:
+            response = (
+                self.supabase_client.table("datasets")
+                .select("id, name, name_python")
+                .eq("id", dataset_id)
+                .eq("project_id", self.project_id)
+                .eq("user_owner", self.user_id)
+                .execute()
+            )
+            if not response.data:
+                raise ValueError(f"Dataset {dataset_id} not found or access denied")
+            return response.data[0]
+        except Exception as e:
+            raise ValueError(f"Failed to get dataset by ID: {str(e)}")
+
+    def get_dataset_by_name_python(self, name_python: str) -> Dict[str, str]:
+        """
+        Get dataset information by name_python.
+
+        Args:
+            name_python: Dataset Python-safe name
+
+        Returns:
+            Dict with id, name, and name_python fields
+
+        Raises:
+            ValueError: If dataset not found
+        """
+        try:
+            response = (
+                self.supabase_client.table("datasets")
+                .select("id, name, name_python")
+                .eq("project_id", self.project_id)
+                .eq("user_owner", self.user_id)
+                .eq("name_python", name_python)
+                .execute()
+            )
+            if not response.data:
+                raise ValueError(f"Dataset with name_python '{name_python}' not found in this project")
+            return response.data[0]
+        except Exception as e:
+            raise ValueError(f"Failed to get dataset by name_python: {str(e)}")
+
+    def get_sheet_by_id(self, sheet_id: str) -> Dict[str, str]:
+        """
+        Get datasheet information by ID.
+
+        Args:
+            sheet_id: Datasheet ID
+
+        Returns:
+            Dict with id, name, name_python, and dataset_id fields
+
+        Raises:
+            ValueError: If datasheet not found or access denied
+        """
+        try:
+            response = (
+                self.supabase_client.table("datasheets")
+                .select("id, name, name_python, dataset_id")
+                .eq("id", sheet_id)
+                .eq("user_owner", self.user_id)
+                .execute()
+            )
+            if not response.data:
+                raise ValueError(f"Datasheet {sheet_id} not found or access denied")
+            return response.data[0]
+        except Exception as e:
+            raise ValueError(f"Failed to get datasheet by ID: {str(e)}")
+
+    def get_sheet_by_name_python(self, name_python: str, dataset_id: str = None) -> Dict[str, str]:
+        """
+        Get datasheet information by name_python.
+
+        Args:
+            name_python: Datasheet Python-safe name
+            dataset_id: Dataset ID (if None, search all datasets in project)
+
+        Returns:
+            Dict with id, name, name_python, and dataset_id fields
+
+        Raises:
+            ValueError: If datasheet not found
+        """
+        try:
+            query = (
+                self.supabase_client.table("datasheets")
+                .select("id, name, name_python, dataset_id")
+                .eq("user_owner", self.user_id)
+                .eq("name_python", name_python)
+            )
+
+            if dataset_id:
+                query = query.eq("dataset_id", dataset_id)
+            else:
+                # Filter by project through datasets
+                datasets = self.ds_list()
+                dataset_ids = [ds['id'] for ds in datasets]
+                if not dataset_ids:
+                    raise ValueError(f"No datasets found in project")
+                query = query.in_("dataset_id", dataset_ids)
+
+            response = query.execute()
+            if not response.data:
+                context = f"dataset {dataset_id}" if dataset_id else "this project"
+                raise ValueError(f"Datasheet with name_python '{name_python}' not found in {context}")
+
+            return response.data[0]
+
+        except Exception as e:
+            raise ValueError(f"Failed to get datasheet by name_python: {str(e)}")

@@ -400,6 +400,9 @@ pd.set_option('display.max_columns', None)
             # Sanitize method name to be valid Python identifier
             clean_method_name = self._sanitize_method_name(method_name)
 
+            # Auto-dedent code to handle indented input
+            method_code = textwrap.dedent(method_code)
+
             # Prepend data = self.inputLoad() to method code
             method_code_with_load = f"data = self.inputLoad()\n{method_code}"
 
@@ -447,8 +450,11 @@ pd.set_option('display.max_columns', None)
         # Validate that run code includes df_out
         self._validate_run_code(code['run'])
 
+        # Auto-dedent code to handle indented input
+        run_code_dedented = textwrap.dedent(code['run'])
+
         # Prepend data = self.inputLoad() to run code
-        run_code_with_load = f"data = self.inputLoad()\n{code['run']}"
+        run_code_with_load = f"data = self.inputLoad()\n{run_code_dedented}"
         run_code = self._ensure_save_statement(run_code_with_load)
 
         # Generate additional methods (all methods except 'run')
@@ -689,8 +695,11 @@ pd.set_option('display.max_columns', None)
                 # Validate that run code includes df_out
                 self._validate_run_code(new_code['run'])
 
+                # Auto-dedent code to handle indented input
+                run_code_dedented = textwrap.dedent(new_code['run'])
+
                 # Prepend data = self.inputLoad() to run code
-                run_code_with_load = f"data = self.inputLoad()\n{new_code['run']}"
+                run_code_with_load = f"data = self.inputLoad()\n{run_code_dedented}"
                 run_code = self._ensure_save_statement(run_code_with_load)
                 for node in cls.body:
                     if isinstance(node, ast.FunctionDef) and node.name == "run":
@@ -712,6 +721,9 @@ pd.set_option('display.max_columns', None)
                 # Add new methods
                 for method_name, method_code in other_methods.items():
                     clean_method_name = self._sanitize_method_name(method_name)
+
+                    # Auto-dedent code to handle indented input
+                    method_code = textwrap.dedent(method_code)
 
                     # Prepend data = self.inputLoad() to method code
                     method_code_with_load = f"data = self.inputLoad()\n{method_code}"

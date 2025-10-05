@@ -16,7 +16,7 @@ mcp = FastMCP("OryxForge")
 
 
 
-def utest0():
+def doesnt_work1():
     """just teset it"""
     # {
     #   "cwd": "D:\\OneDrive\\dev\\oryx-forge\\oryx-forge-template-20250923"
@@ -41,10 +41,7 @@ def utest0():
     except:
         return f"Error executing command"
 
-def utest1():
-    return 'hello world'
-
-async def utest():
+async def doesnt_work2():
     """Test async subprocess execution."""
     import asyncio
     import sys
@@ -68,77 +65,213 @@ async def utest():
 
 
 # Code management functions
-def code_upsert_eda(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
-    """Create or update the eda method of a sheet class."""
+def code_upsert_eda(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[dict]] = None, imports: Optional[str] = None) -> dict[str, str]:
+    """Create or update the eda (exploratory data analysis) method of a sheet class.
+
+    Args:
+        sheet: The name_python of the datasheet to update
+        code: The Python code for the eda method body
+        dataset: The name_python of the dataset (optional, uses default if None)
+        inputs: List of upstream dependencies as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+        imports: Additional Python import statements to add to the sheet class
+
+    Returns:
+        Dict with 'status' (success message) and 'file_python_eda' (path to generated script)
+    """
     if inputs is None:
         inputs = []
-    return svc.upsert_eda(sheet, code, dataset, inputs, imports)
+    status = svc.upsert_eda(sheet, code, dataset, inputs, imports)
+    file = svc.run_task(sheet, 'eda', dataset=dataset, execute=False)
+    return {'status': status, 'file_python_eda': file}
 
 
 def code_read_eda(sheet: str, dataset: Optional[str] = None) -> str:
-    """Read the eda method code of a sheet class."""
+    """Read the current eda method code of a sheet class.
+
+    Args:
+        sheet: The name_python of the datasheet to read
+        dataset: The name_python of the dataset (optional, uses default if None)
+
+    Returns:
+        The Python code of the eda method as a string
+    """
     return svc.read(sheet, dataset, method='eda')
 
 
-def code_upsert_run(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
-    """Create or update the run method of a sheet class."""
+def code_upsert_run(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[dict]] = None, imports: Optional[str] = None) -> dict[str, str]:
+    """Create or update the run method of a sheet class for d6tflow workflow execution.
+
+    Args:
+        sheet: The name_python of the datasheet to update
+        code: The Python code for the run method body
+        dataset: The name_python of the dataset (optional, uses default if None)
+        inputs: List of upstream dependencies as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+        imports: Additional Python import statements to add to the sheet class
+
+    Returns:
+        Dict with 'status' (success message) and 'file_python_flow' (path to generated workflow script)
+    """
     if inputs is None:
         inputs = []
-    return svc.upsert_run(sheet, code, dataset, inputs, imports)
+    status = svc.upsert_run(sheet, code, dataset, inputs, imports)
+    file = svc.run_flow(sheet, dataset, execute=False)
+    return {'status': status, 'file_python_flow': file}
 
 
 def code_read_run(sheet: str, dataset: Optional[str] = None) -> str:
-    """Read the run method code of a sheet class."""
+    """Read the current run method code of a sheet class.
+
+    Args:
+        sheet: The name_python of the datasheet to read
+        dataset: The name_python of the dataset (optional, uses default if None)
+
+    Returns:
+        The Python code of the run method as a string
+    """
     return svc.read(sheet, dataset, method='run')
 
 
 # Workflow execution functions
 def workflow_run_eda(sheet: str, dataset: Optional[str] = None) -> dict:
-    """Execute the eda method of a sheet class."""
-    return svc.run_task(sheet, 'eda', dataset=dataset, execute=True)
+    """Generate and return the Python script to execute the eda method of a sheet class.
+
+    Args:
+        sheet: The name_python of the datasheet to execute
+        dataset: The name_python of the dataset (optional, uses default if None)
+
+    Returns:
+        Dict with 'file_python_eda' key containing path to generated Python script
+    """
+    file = svc.run_task(sheet, 'eda', dataset=dataset, execute=False)
+    return {'file_python_eda': file}
 
 
 def workflow_run_flow(sheet: str, dataset: Optional[str] = None, flow_params: Optional[dict] = None, reset_sheets: Optional[list[str]] = None) -> dict:
-    """Execute a d6tflow workflow for a sheet class."""
-    return svc.run_flow(sheet, dataset, flow_params=flow_params, reset_sheets=reset_sheets, execute=True)
+    """Generate and return the Python script to execute a d6tflow workflow for a sheet class.
+
+    Args:
+        sheet: The name_python of the datasheet to execute
+        dataset: The name_python of the dataset (optional, uses default if None)
+        flow_params: Optional parameters to pass to the workflow execution
+        reset_sheets: List of sheet names to reset before execution
+                     Example: ['HpiMasterCsv', 'CleanedData']
+                     Note: These should be simple sheet names from the same dataset
+
+    Returns:
+        Dict with 'file_python_flow' key containing path to generated Python workflow script
+    """
+    file = svc.run_flow(sheet, dataset, flow_params=flow_params, reset_sheets=reset_sheets, reset_task=True, execute=False)
+    return {'file_python_flow': file}
 
 
 # Project management functions
-def project_create_dataset(name: str) -> str:
-    """Create a new dataset in the current project."""
-    user_id = get_user_id()
-    project_id = get_project_id()
+def project_create_dataset(user_id: str, project_id: str, name: str) -> str:
+    """Create a new dataset in the current project.
+
+    Args:
+        user_id: User UUID who owns the dataset
+        project_id: Project UUID to create the dataset in
+        name: The display name for the new dataset (will be converted to name_python internally)
+
+    Returns:
+        The ID of the newly created dataset
+    """
     project_service = ProjectService(project_id, user_id)
     return project_service.ds_create(name)
 
 
-def project_create_sheet(dataset_id: str, name: str) -> str:
-    """Create a new datasheet in the specified dataset."""
-    user_id = get_user_id()
-    project_id = get_project_id()
+def project_create_sheet(user_id: str, project_id: str, dataset_id: str, name: str) -> str:
+    """Create a new datasheet in the specified dataset.
+
+    Args:
+        user_id: User UUID who owns the datasheet
+        project_id: Project UUID
+        dataset_id: The ID of the dataset to create the sheet in
+        name: The display name for the new datasheet (will be converted to name_python internally)
+
+    Returns:
+        The ID of the newly created datasheet
+    """
     project_service = ProjectService(project_id, user_id)
     return project_service.sheet_create(dataset_id, name)
 
 
-def project_list_datasets() -> list[dict]:
-    """List all datasets in the current project."""
-    user_id = get_user_id()
-    project_id = get_project_id()
+def project_list_datasets(user_id: str, project_id: str) -> list[dict]:
+    """List all datasets in the current project.
+
+    Args:
+        user_id: User UUID
+        project_id: Project UUID
+
+    Returns:
+        List of dicts, each containing id, name, and name_python fields for a dataset
+    """
     project_service = ProjectService(project_id, user_id)
     return project_service.ds_list()
 
 
-def project_list_sheets(dataset_id: Optional[str] = None) -> list[dict]:
-    """List all datasheets in the current project or specific dataset."""
-    user_id = get_user_id()
-    project_id = get_project_id()
+def project_get_dataset(user_id: str, project_id: str, id: Optional[str] = None, name: Optional[str] = None, name_python: Optional[str] = None) -> dict:
+    """Get a single dataset by id, name, or name_python.
+
+    Args:
+        user_id: User UUID
+        project_id: Project UUID
+        id: Dataset ID (highest priority)
+        name: Dataset name (medium priority)
+        name_python: Dataset Python-safe name (lowest priority)
+
+    Returns:
+        Dict with id, name, and name_python fields
+
+    Note:
+        Parameter priority: id > name > name_python
+    """
     project_service = ProjectService(project_id, user_id)
-    return project_service.sheet_list(dataset_id)
+    return project_service.ds_get(id=id, name=name, name_python=name_python)
+
+
+def project_list_sheets(user_id: str, project_id: str, dataset_id: Optional[str] = None, dataset_name: Optional[str] = None, dataset_name_python: Optional[str] = None) -> list[dict]:
+    """List all datasheets in the current project or specific dataset.
+
+    Args:
+        user_id: User UUID
+        project_id: Project UUID
+        dataset_id: Dataset ID (if None, list all datasheets in project)
+        dataset_name: Dataset name to filter by (lower priority than dataset_id)
+        dataset_name_python: Dataset name_python to filter by (lowest priority)
+
+    Returns:
+        List of dicts, each containing id, name, name_python, and dataset_id fields for a datasheet
+
+    Note:
+        Parameter priority: dataset_id > dataset_name > dataset_name_python
+    """
+    project_service = ProjectService(project_id, user_id)
+    return project_service.sheet_list(dataset_id, dataset_name, dataset_name_python)
+
+
+def project_get_sheet(user_id: str, project_id: str, dataset_id: Optional[str] = None, id: Optional[str] = None, name: Optional[str] = None, name_python: Optional[str] = None) -> dict:
+    """Get a single datasheet by id, name, or name_python.
+
+    Args:
+        user_id: User UUID
+        project_id: Project UUID
+        dataset_id: Dataset ID to filter by (optional, searches all project datasets if None)
+        id: Datasheet ID (highest priority)
+        name: Datasheet name (medium priority)
+        name_python: Datasheet Python-safe name (lowest priority)
+
+    Returns:
+        Dict with id, name, name_python, and dataset_id fields
+
+    Note:
+        Parameter priority: id > name > name_python
+    """
+    project_service = ProjectService(project_id, user_id)
+    return project_service.sheet_get(dataset_id=dataset_id, id=id, name=name, name_python=name_python)
 
 
 # Register all tools with MCP
-mcp.tool(utest)
-mcp.tool(utest1)
 mcp.tool(code_upsert_eda)
 mcp.tool(code_read_eda)
 mcp.tool(code_upsert_run)
@@ -148,4 +281,6 @@ mcp.tool(workflow_run_flow)
 mcp.tool(project_create_dataset)
 mcp.tool(project_create_sheet)
 mcp.tool(project_list_datasets)
+mcp.tool(project_get_dataset)
 mcp.tool(project_list_sheets)
+mcp.tool(project_get_sheet)

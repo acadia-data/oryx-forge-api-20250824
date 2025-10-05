@@ -13,7 +13,7 @@ svc = WorkflowService(base_dir=str(Path.cwd()))
 
 # Code management functions
 @tool
-def code_upsert_eda(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
+def code_upsert_eda(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[dict]] = None, imports: Optional[str] = None) -> str:
     """Create or update the eda method of a sheet class."""
     if inputs is None:
         inputs = []
@@ -27,7 +27,7 @@ def code_read_eda(sheet: str, dataset: Optional[str] = None) -> str:
 
 
 @tool
-def code_upsert_run(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
+def code_upsert_run(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[dict]] = None, imports: Optional[str] = None) -> str:
     """Create or update the run method of a sheet class."""
     if inputs is None:
         inputs = []

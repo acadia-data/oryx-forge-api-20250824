@@ -24,15 +24,16 @@ class InputSchema(BaseModel):
 
 
 class WorkflowService:
-    def __init__(self, base_module: str = "tasks", base_dir: str = "."):
+    def __init__(self, base_module: str = "tasks", base_dir: str = ".", sanitize: bool = False):
         self.base_module = base_module
         self.base_dir = Path(base_dir)
         self.base_module_dir = self.base_dir / base_module
-        
+        self.sanitize = sanitize
+
         # Create base module directory and __init__.py
         self.base_module_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_init_file()
-        
+
         # For backward compatibility, still support single-file mode
         self.single_file_mode = False
     
@@ -46,7 +47,7 @@ class WorkflowService:
         """Create __init__.py if it doesn't exist."""
         init_file = self.base_module_dir / "__init__.py"
         if not init_file.exists():
-            init_file.write_text("")
+            init_file.write_text("", encoding='utf-8')
 
     def _parse_imports_string(self, imports_str: str) -> list[str]:
         """Parse import string into individual import statements. Keep it simple for now."""
@@ -146,18 +147,76 @@ class WorkflowService:
 
     def _ensure_imports(self, tree):
         """Ensure required imports are present in the given AST tree."""
+        # Only merge actual import statements
         needed_imports_str = """
 import d6tflow
 import pandas as pd
-pd.set_option('display.max_columns', None)
 """
         self._merge_imports(tree, needed_imports_str)
+
+        # Add pd.set_option as a separate statement (not an import)
+        # Check if it already exists to avoid duplicates
+        has_set_option = False
+        for node in tree.body:
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                if (isinstance(node.value.func, ast.Attribute) and
+                    isinstance(node.value.func.value, ast.Name) and
+                    node.value.func.value.id == 'pd' and
+                    node.value.func.attr == 'set_option'):
+                    has_set_option = True
+                    break
+
+        if not has_set_option:
+            # Find position after imports
+            last_import_index = 0
+            for i, node in enumerate(tree.body):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    last_import_index = i + 1
+
+            # Create pd.set_option statement
+            set_option_stmt = ast.parse("pd.set_option('display.max_columns', None)").body[0]
+            tree.body.insert(last_import_index, set_option_stmt)
 
     def _find_class(self, tree, sheet: str):
         for node in tree.body:
             if isinstance(node, ast.ClassDef) and node.name == sheet:
                 return node
         return None
+
+    def _validate_dataset_name(self, dataset: str) -> None:
+        """Validate dataset name has only valid characters (alphanumeric and underscores).
+
+        Raises:
+            ValueError: If dataset name contains invalid characters or has invalid format
+        """
+        if dataset is None:
+            return
+
+        if not dataset or not str(dataset):
+            raise ValueError("Dataset name cannot be empty")
+
+        dataset = str(dataset)
+
+        # Check for whitespaces
+        if re.search(r'\s', dataset):
+            raise ValueError(f"Dataset name '{dataset}' contains whitespace characters")
+
+        # Check for invalid characters (only allow alphanumeric and underscores)
+        if not re.match(r'^[a-zA-Z0-9_]+$', dataset):
+            invalid_chars = set(re.findall(r'[^a-zA-Z0-9_]', dataset))
+            raise ValueError(f"Dataset name '{dataset}' contains invalid characters: {invalid_chars}. Only alphanumeric and underscores allowed.")
+
+        # Check for Python keywords
+        if keyword.iskeyword(dataset.lower()):
+            raise ValueError(f"Dataset name '{dataset}' is a Python keyword")
+
+        # Check it doesn't start with a digit
+        if dataset[0].isdigit():
+            raise ValueError(f"Dataset name '{dataset}' cannot start with a digit")
+
+        # Check length
+        if len(dataset) > 50:
+            raise ValueError(f"Dataset name '{dataset}' is too long (max 50 characters)")
 
     def _sanitize_dataset_name(self, dataset: str) -> str:
         """Auto-sanitize to valid dataset name (snake_case)."""
@@ -167,7 +226,7 @@ pd.set_option('display.max_columns', None)
             return "default_dataset"
 
         dataset = str(dataset).strip()
-        
+
         # Convert camelCase/PascalCase to snake_case
         dataset = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', dataset)
         # Replace spaces, hyphens, dots with underscores
@@ -197,13 +256,49 @@ pd.set_option('display.max_columns', None)
 
         return dataset
 
+    def _validate_sheet_name(self, sheet: str) -> None:
+        """Validate sheet name has only valid characters (alphanumeric).
+
+        Raises:
+            ValueError: If sheet name contains invalid characters or has invalid format
+        """
+        if not sheet or not str(sheet):
+            raise ValueError("Sheet name cannot be empty")
+
+        sheet = str(sheet)
+
+        # Check for whitespaces
+        if re.search(r'\s', sheet):
+            raise ValueError(f"Sheet name '{sheet}' contains whitespace characters")
+
+        # Check for invalid characters (only allow alphanumeric)
+        if not re.match(r'^[a-zA-Z0-9]+$', sheet):
+            invalid_chars = set(re.findall(r'[^a-zA-Z0-9]', sheet))
+            raise ValueError(f"Sheet name '{sheet}' contains invalid characters: {invalid_chars}. Only alphanumeric characters allowed.")
+
+        # Check for Python keywords
+        if keyword.iskeyword(sheet.lower()):
+            raise ValueError(f"Sheet name '{sheet}' is a Python keyword")
+
+        # Check it starts with uppercase letter
+        if not sheet[0].isupper():
+            raise ValueError(f"Sheet name '{sheet}' must start with an uppercase letter")
+
+        # Check it doesn't start with a digit
+        if sheet[0].isdigit():
+            raise ValueError(f"Sheet name '{sheet}' cannot start with a digit")
+
+        # Check length
+        if len(sheet) > 50:
+            raise ValueError(f"Sheet name '{sheet}' is too long (max 50 characters)")
+
     def _sanitize_sheet_name(self, sheet: str) -> str:
         """Auto-sanitize to valid class name (PascalCase)."""
         if not sheet or not str(sheet).strip():
             return "DefaultSheet"
 
         sheet = str(sheet).strip()
-        
+
         # If it's already a valid Python identifier and starts with uppercase, keep it
         if sheet.isidentifier() and sheet[0].isupper():
             # Handle Python keywords
@@ -261,14 +356,14 @@ pd.set_option('display.max_columns', None)
 
         return clean_inputs
 
-    def _process_inputs(self, inputs: list[dict] | list[str] | None, current_dataset: str = None) -> tuple[list[str], list[str], dict[str, str]]:
+    def _process_inputs(self, inputs: list[dict] | None, current_dataset: str = None) -> tuple[list[str], list[str], dict[str, str]]:
         """Process and validate inputs, return (class_names, datasets_to_import, metadata).
 
         Args:
-            inputs: List of input specifications. Can be:
-                    - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
-                    - List of strings: ['Hpi', 'Another'] (legacy format, assumes same dataset)
-                    - None
+            inputs: List of input specifications in dict format:
+                    [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
+                    - dataset: Dataset name (optional, uses current_dataset if None)
+                    - sheet: Sheet class name (required)
             current_dataset: The dataset we're generating code for (to avoid self-imports)
 
         Returns:
@@ -279,12 +374,6 @@ pd.set_option('display.max_columns', None)
         """
         if not inputs:
             return [], [], {}
-
-        # Handle legacy format (list of strings) - convert to dict format
-        if inputs and isinstance(inputs[0], str):
-            logger.info("Legacy inputs format detected (list of strings). Converting to dict format.")
-            # Convert to dict format: ['Task1', 'Task2'] -> [{'dataset': current_dataset, 'sheet': 'Task1'}, ...]
-            inputs = [{'dataset': current_dataset, 'sheet': sheet} for sheet in inputs]
 
         # Validate using pydantic
         validated_inputs = []
@@ -338,26 +427,40 @@ pd.set_option('display.max_columns', None)
         return class_names, list(datasets_to_import), metadata
 
     def _auto_clean_names(self, dataset: str, sheet: str) -> tuple[str, str]:
-        """Auto-clean both dataset and sheet names, log changes."""
+        """Either validate or auto-clean both dataset and sheet names based on self.sanitize.
+
+        If self.sanitize is False, validate names and raise errors if invalid.
+        If self.sanitize is True, auto-clean names and log changes.
+
+        Raises:
+            ValueError: If sanitize=False and names contain invalid characters
+        """
         original_dataset, original_sheet = dataset, sheet
 
-        clean_dataset = self._sanitize_dataset_name(dataset)
-        clean_sheet = self._sanitize_sheet_name(sheet)
+        if not self.sanitize:
+            # Validation mode - check for invalid characters and raise errors
+            self._validate_dataset_name(dataset)
+            self._validate_sheet_name(sheet)
+            return dataset, sheet
+        else:
+            # Sanitization mode - auto-clean and log changes
+            clean_dataset = self._sanitize_dataset_name(dataset)
+            clean_sheet = self._sanitize_sheet_name(sheet)
 
-        # Log changes if any
-        changes = []
-        if original_dataset != clean_dataset:
-            if clean_dataset is None:
-                changes.append(f"dataset: '{original_dataset}' -> 'tasks/__init__.py'")
-            else:
-                changes.append(f"dataset: '{original_dataset}' -> '{clean_dataset}'")
-        if original_sheet != clean_sheet:
-            changes.append(f"sheet: '{original_sheet}' -> '{clean_sheet}'")
+            # Log changes if any
+            changes = []
+            if original_dataset != clean_dataset:
+                if clean_dataset is None:
+                    changes.append(f"dataset: '{original_dataset}' -> 'tasks/__init__.py'")
+                else:
+                    changes.append(f"dataset: '{original_dataset}' -> '{clean_dataset}'")
+            if original_sheet != clean_sheet:
+                changes.append(f"sheet: '{original_sheet}' -> '{clean_sheet}'")
 
-        if changes:
-            logger.info(f"Auto-cleaned: {', '.join(changes)}")
+            if changes:
+                logger.info(f"Auto-cleaned: {', '.join(changes)}")
 
-        return clean_dataset, clean_sheet
+            return clean_dataset, clean_sheet
 
     def _sanitize_method_name(self, method_name: str) -> str:
         """Sanitize method name to be valid Python identifier."""
@@ -438,8 +541,17 @@ pd.set_option('display.max_columns', None)
         """
         decorator_str = ""
         if inputs:
-            # Build decorator with metadata dict format: @d6tflow.requires({'sources.Hpi': sources.Hpi})
-            decorator_items = [f"'{key}': {value}" for key, value in inputs_metadata.items()]
+            # Build decorator with metadata dict format: @d6tflow.requires({'sources.Hpi': tasks.sources.Hpi})
+            # Add self.base_module prefix to values that contain a dot (cross-dataset references)
+            decorator_items = []
+            for key, value in inputs_metadata.items():
+                if '.' in value:
+                    # Cross-dataset reference: prefix with self.base_module
+                    prefixed_value = f"{self.base_module}.{value}"
+                else:
+                    # Same-dataset reference: keep as is
+                    prefixed_value = value
+                decorator_items.append(f"'{key}': {prefixed_value}")
             decorator_dict = "{" + ", ".join(decorator_items) + "}"
             decorator_str = f"@d6tflow.requires({decorator_dict})\n"
 
@@ -484,17 +596,23 @@ pd.set_option('display.max_columns', None)
 
     # ---------- CRUD Methods ----------
 
-    def create(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
+    def create(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[dict] = None, imports: str = None):
         """Create a new sheet class (fails if already exists).
 
         Args:
-            sheet: Class name
+            sheet: Class name (PascalCase, e.g., 'HpiMasterCsv')
             code: Dict of {method_name: method_code}. Must include 'run' key.
-            dataset: Dataset name (file to write to)
-            inputs: List of input sheet dependencies. Can be:
-                    - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
-                    - List of strings: ['Hpi', 'Another'] (legacy format)
-            imports: Custom imports string
+                  Example: {'run': 'df_out = pd.DataFrame(...)'}
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, uses tasks/__init__.py
+            inputs: List of upstream dependencies as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+            imports: Custom import statements as newline-separated string
+                     Example: 'import numpy as np\\nimport json'
+
+        Returns:
+            str: Success message with created class location
+
+        Raises:
+            ValueError: If sheet already exists or code validation fails
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
 
@@ -503,7 +621,7 @@ pd.set_option('display.max_columns', None)
 
         # Load existing file or create new tree
         if filename.exists():
-            tree = ast.parse(filename.read_text())
+            tree = ast.parse(filename.read_text(encoding='utf-8'))
         else:
             tree = ast.parse("")
 
@@ -532,23 +650,29 @@ pd.set_option('display.max_columns', None)
         logger.success(status_msg)
         return status_msg
 
-    def upsert(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
+    def upsert(self, sheet: str, code: dict[str, str], dataset: str = None, inputs: list[dict] = None, imports: str = None):
         """Create a new sheet class or update if it already exists (upsert).
 
         Args:
-            sheet: Class name
+            sheet: Class name (PascalCase, e.g., 'HpiMasterCsv')
             code: Dict of {method_name: method_code}. Must include 'run' key.
-            dataset: Dataset name (file to write to)
-            inputs: List of input sheet dependencies. Can be:
-                    - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
-                    - List of strings: ['Hpi', 'Another'] (legacy format)
-            imports: Custom imports string
+                  Example: {'run': 'df_out = pd.DataFrame(...)', 'eda': 'print(data)'}
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, uses tasks/__init__.py
+            inputs: List of upstream dependencies as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+            imports: Custom import statements as newline-separated string
+                     Example: 'import numpy as np\\nimport json'
+
+        Returns:
+            str: Success message with created/updated class location
+
+        Raises:
+            ValueError: If code validation fails
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
 
         # Check if sheet already exists
         if filename.exists():
-            tree = ast.parse(filename.read_text())
+            tree = ast.parse(filename.read_text(encoding='utf-8'))
             existing_class = self._find_class(tree, sheet_clean)
             if existing_class:
                 # Update existing class
@@ -557,31 +681,44 @@ pd.set_option('display.max_columns', None)
         # Create new class
         return self.create(sheet=sheet_clean, code=code, dataset=dataset_clean, inputs=inputs, imports=imports)
 
-    def upsert_run(self, sheet: str, code: str, dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
-        """Convenience function to upsert just the run method.
+    def upsert_run(self, sheet: str, code: str, dataset: str = None, inputs: list[dict] = None, imports: str = None):
+        """Convenience function to upsert just the run method (creates workflow task).
 
         Args:
-            sheet: Class name
+            sheet: Class name (PascalCase, e.g., 'ProcessedData')
             code: Code for the run() method (as string). Must assign results to 'df_out'.
-                  Example: df_out = pd.DataFrame({'data': [1, 2, 3]})
-            dataset: Dataset name (file to write to)
-            inputs: List of input sheet dependencies
-            imports: Custom imports string
+                  Example: 'df_out = pd.DataFrame({"data": [1, 2, 3]})'
+            dataset: Dataset name (snake_case, e.g., 'processed'). If None, uses tasks/__init__.py
+            inputs: List of upstream dependencies as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+            imports: Custom import statements as newline-separated string
+
+        Returns:
+            str: Success message with created/updated class location
 
         Raises:
             ValueError: If code does not include 'df_out' assignment
         """
         return self.upsert(sheet=sheet, code={'run': code}, dataset=dataset, inputs=inputs, imports=imports)
 
-    def upsert_eda(self, sheet: str, code: str, dataset: str = None, inputs: list[dict] | list[str] = None, imports: str = None):
-        """Convenience function to upsert just the eda method.
+    def upsert_eda(self, sheet: str, code: str, dataset: str = None, inputs: list[dict] = None, imports: str = None):
+        """Convenience function to upsert just the eda method (exploratory data analysis).
+
+        The eda method is for exploration/analysis only and does NOT save output.
+        For workflow tasks that save output, use upsert_run instead.
 
         Args:
-            sheet: Class name
-            code: Code for the eda() method (as string)
-            dataset: Dataset name (file to write to)
-            inputs: List of input sheet dependencies
-            imports: Custom imports string
+            sheet: Class name (PascalCase, e.g., 'HpiMasterCsv')
+            code: Code for the eda() method (as string). Does not require df_out.
+                  Example: 'print(data[0].head())\\nprint(data[0].info())'
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, uses tasks/__init__.py
+            inputs: List of upstream dependencies as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+            imports: Custom import statements as newline-separated string
+
+        Returns:
+            str: Success message with created/updated class location
+
+        Note:
+            If sheet exists, preserves existing run() method. If new, creates default run() method.
         """
         # Try to preserve the existing run method if sheet exists
         try:
@@ -596,19 +733,22 @@ pd.set_option('display.max_columns', None)
         """Return the source code for a given class or specific method body.
 
         Args:
-            sheet: Class name
-            dataset: Dataset name (file to read from)
+            sheet: Class name (PascalCase, e.g., 'HpiMasterCsv')
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, reads from tasks/__init__.py
             method: Method name to read (e.g., 'run', 'eda'). If None, returns full class.
 
         Returns:
-            Method body code if method specified, otherwise full class definition
+            str: Method body code if method specified, otherwise full class definition
+
+        Raises:
+            ValueError: If file, class, or method not found
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
 
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
 
-        tree = ast.parse(filename.read_text())
+        tree = ast.parse(filename.read_text(encoding='utf-8'))
         cls = self._find_class(tree, sheet_clean)
         if not cls:
             raise ValueError(f"Class {sheet_clean} not found in {self._get_dataset_display(dataset_clean)}")
@@ -649,19 +789,24 @@ pd.set_option('display.max_columns', None)
         sheet: str,
         dataset: str = None,
         new_code: dict[str, str] = None,
-        new_inputs: list[dict] | list[str] = None,
+        new_inputs: list[dict] = None,
         new_imports: str = None,
     ):
-        """
-        Update an existing class.
+        """Update an existing sheet class.
 
         Args:
-            sheet: Class name
+            sheet: Class name (PascalCase, e.g., 'HpiMasterCsv')
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, uses tasks/__init__.py
             new_code: Dict of {method_name: method_code} to replace. Can include 'run' and other methods.
-            new_inputs: replace @d6tflow.requires(...). Can be:
-                        - List of dicts: [{'dataset': 'sources', 'sheet': 'Hpi'}, ...]
-                        - List of strings: ['Hpi', 'Another'] (legacy format)
-            new_imports: add new imports to the file
+                      Example: {'run': 'df_out = pd.DataFrame(...)', 'eda': 'print(data)'}
+            new_inputs: Replace @d6tflow.requires(...) decorator as dicts: [{'dataset': 'sources', 'sheet': 'HpiMasterCsv'}, ...]
+            new_imports: Add new import statements (newline-separated string)
+
+        Returns:
+            str: Success message with updated class location
+
+        Raises:
+            ValueError: If class not found or code validation fails
         """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
 
@@ -674,7 +819,7 @@ pd.set_option('display.max_columns', None)
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
 
-        tree = ast.parse(filename.read_text())
+        tree = ast.parse(filename.read_text(encoding='utf-8'))
         cls = self._find_class(tree, sheet_clean)
         if not cls:
             raise ValueError(f"Class {sheet_clean} not found in {self._get_dataset_display(dataset_clean)}")
@@ -748,7 +893,16 @@ pd.set_option('display.max_columns', None)
             # Add new decorator if inputs exist
             if class_names:
                 # Build decorator string with metadata dict format
-                decorator_items = [f"'{key}': {value}" for key, value in inputs_metadata.items()]
+                # Add self.base_module prefix to values that contain a dot (cross-dataset references)
+                decorator_items = []
+                for key, value in inputs_metadata.items():
+                    if '.' in value:
+                        # Cross-dataset reference: prefix with self.base_module
+                        prefixed_value = f"{self.base_module}.{value}"
+                    else:
+                        # Same-dataset reference: keep as is
+                        prefixed_value = value
+                    decorator_items.append(f"'{key}': {prefixed_value}")
                 decorator_dict = "{" + ", ".join(decorator_items) + "}"
                 decorator_code = f"@d6tflow.requires({decorator_dict})"
 
@@ -767,13 +921,21 @@ class Temp: pass
         return status_msg
 
     def delete(self, sheet: str, dataset: str = None):
-        """Delete a class definition by sheet name."""
+        """Delete a sheet class definition.
+
+        Args:
+            sheet: Class name (PascalCase, e.g., 'HpiMasterCsv')
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, uses tasks/__init__.py
+
+        Raises:
+            ValueError: If file or class not found
+        """
         dataset_clean, sheet_clean, filename = self._prepare_sheet_operation(dataset, sheet)
         
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
         
-        tree = ast.parse(filename.read_text())
+        tree = ast.parse(filename.read_text(encoding='utf-8'))
         new_body = [
             n
             for n in tree.body
@@ -786,24 +948,42 @@ class Temp: pass
         logger.success(f"Deleted {sheet_clean} from {self._get_dataset_display(dataset_clean)}")
 
     def list_sheets(self, dataset: str = None):
-        """List all defined sheet class names in a specific dataset file."""
+        """List all defined sheet class names in a specific dataset file.
+
+        Args:
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, lists from tasks/__init__.py
+
+        Returns:
+            list[str]: List of class names (PascalCase)
+        """
         original_dataset = dataset
-        dataset = self._sanitize_dataset_name(dataset)
-        if original_dataset != dataset:
-            if dataset is None:
-                logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> 'tasks/__init__.py'")
-            else:
-                logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> '{dataset}'")
+
+        if not self.sanitize:
+            # Validation mode
+            self._validate_dataset_name(dataset)
+        else:
+            # Sanitization mode
+            dataset = self._sanitize_dataset_name(dataset)
+            if original_dataset != dataset:
+                if dataset is None:
+                    logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> 'tasks/__init__.py'")
+                else:
+                    logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> '{dataset}'")
+
         filename = self.get_filename(dataset)
-        
+
         if not filename.exists():
             return []
-        
-        tree = ast.parse(filename.read_text())
+
+        tree = ast.parse(filename.read_text(encoding='utf-8'))
         return [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
 
     def list_datasets(self):
-        """List all available datasets by scanning the base module directory."""
+        """List all available datasets by scanning the base module directory.
+
+        Returns:
+            list[str]: Sorted list of dataset names (snake_case, e.g., ['processed', 'sources'])
+        """
         if not self.base_module_dir.exists():
             return []
         
@@ -819,18 +999,25 @@ class Temp: pass
     def list_sheets_by_dataset(self, dataset: str = None):
         """List all sheet classes in a given dataset using AST parsing."""
         original_dataset = dataset
-        dataset = self._sanitize_dataset_name(dataset)
-        if original_dataset != dataset:
-            if dataset is None:
-                logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> 'tasks/__init__.py'")
-            else:
-                logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> '{dataset}'")
+
+        if not self.sanitize:
+            # Validation mode
+            self._validate_dataset_name(dataset)
+        else:
+            # Sanitization mode
+            dataset = self._sanitize_dataset_name(dataset)
+            if original_dataset != dataset:
+                if dataset is None:
+                    logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> 'tasks/__init__.py'")
+                else:
+                    logger.info(f"Auto-cleaned dataset: '{original_dataset}' -> '{dataset}'")
+
         filename = self.get_filename(dataset)
-        
+
         if not filename.exists():
             return []
-        
-        tree = ast.parse(filename.read_text())
+
+        tree = ast.parse(filename.read_text(encoding='utf-8'))
         return [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
 
     def rename_sheet(self, old_sheet: str, new_sheet: str, dataset: str = None):
@@ -861,7 +1048,7 @@ class Temp: pass
         if not filename.exists():
             raise ValueError(f"File {self._get_file_display(dataset_clean)} not found")
         
-        tree = ast.parse(filename.read_text())
+        tree = ast.parse(filename.read_text(encoding='utf-8'))
         cls = self._find_class(tree, old_sheet)
         if not cls:
             raise ValueError(f"Class {old_sheet} not found in {self._get_dataset_display(dataset_clean)}")
@@ -912,7 +1099,7 @@ class Temp: pass
         """
         if file_out:
             output_path = self.base_dir / file_out
-            output_path.write_text(script)
+            output_path.write_text(script, encoding='utf-8')
             logger.info(f"Wrote {script_type} script to {output_path}")
 
             if execute:
@@ -946,21 +1133,26 @@ class Temp: pass
                   flow_params: dict = None, reset_sheets: list[str] = None,
                   reset_task: bool = False,
                   file_out: str = "run_flow.py", execute: bool = False) -> str | dict:
-        """Generate a run script for a d6tflow workflow.
+        """Generate a Python script to execute a d6tflow workflow.
 
         Args:
-            sheet: Sheet name
-            dataset: Dataset name
-            flow_params: Flow parameters dict
-            reset_sheets: List of sheets to reset
+            sheet: Sheet/task class name (PascalCase, e.g., 'ProcessedData')
+            dataset: Dataset name (snake_case, e.g., 'processed'). If None, uses tasks/__init__.py
+            flow_params: Optional parameters dict to pass to d6tflow.Workflow
+                        Example: {'param1': 'value1', 'param2': 'value2'}
+            reset_sheets: List of sheet names to reset before execution (same dataset only)
+                         Example: ['SheetName1', 'SheetName2']
             reset_task: If True, reset the target task before running
             file_out: File path to write the script to. Defaults to 'run_flow.py'. Set to None to skip writing.
             execute: If True, execute the script after generating it. Requires file_out to be set.
 
         Returns:
             If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
-            If file_out specified (no execute): str with file path written to
-            Otherwise: the script content
+            If file_out specified (no execute): str with absolute file path written to
+            Otherwise: the script content as string
+
+        Raises:
+            ValueError: If sheet not found or execute=True without file_out
         """
         script = self._generate_flow_script(sheet, dataset, flow_params, reset_sheets,
                                            preview_only=False, reset_task=reset_task)
@@ -989,19 +1181,24 @@ class Temp: pass
 
     def run_task(self, sheet: str, function: str, dataset: str = None,
                   file_out: str = "run_task.py", execute: bool = False) -> str | dict:
-        """Generate a script to execute a specific function on a task class.
+        """Generate a Python script to execute a specific method on a task class.
+
+        Use this to run custom methods like eda() or any other method defined on the task.
 
         Args:
-            sheet: Sheet/Task class name
-            function: Function name to execute on the task
-            dataset: Dataset name (file to read from)
+            sheet: Sheet/Task class name (PascalCase, e.g., 'HpiMasterCsv')
+            function: Method name to execute (e.g., 'eda', 'custom_method')
+            dataset: Dataset name (snake_case, e.g., 'sources'). If None, uses tasks/__init__.py
             file_out: File path to write the script to. Defaults to 'run_task.py'. Set to None to skip writing.
             execute: If True, execute the script after generating it. Requires file_out to be set.
 
         Returns:
             If execute=True: dict with 'stdout', 'stderr', 'returncode' keys
-            If file_out specified (no execute): str with file path written to
-            Otherwise: the script content
+            If file_out specified (no execute): str with absolute file path written to
+            Otherwise: the script content as string
+
+        Raises:
+            ValueError: If sheet not found or execute=True without file_out
         """
         dataset_clean, sheet_clean = self._validate_flow_task(sheet, dataset)
 
@@ -1251,4 +1448,4 @@ flow = d6tflow.Workflow(task=task, params=params)
     def _save_file(self, filename: Path, tree):
         """Save the AST tree to a file."""
         formatted_code = ast.unparse(tree)
-        filename.write_text(formatted_code)
+        filename.write_text(formatted_code, encoding='utf-8')

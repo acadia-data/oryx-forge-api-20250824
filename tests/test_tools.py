@@ -44,21 +44,22 @@ def test_code_upsert_eda(mock_svc):
     from oryxforge.tools.mcp import code_upsert_eda
 
     mock_svc.upsert_eda.return_value = "Success"
+    mock_svc.run_task.return_value = "/path/to/run_task.py"
 
     result = code_upsert_eda(
         sheet="TestSheet",
         code="print('test')",
         dataset="test_dataset",
-        inputs=["Sheet1"],
+        inputs=[{"dataset": "test_dataset", "sheet": "Sheet1"}],
         imports="import pandas as pd"
     )
 
-    assert result == "Success"
+    assert result == {'status': 'Success', 'file_python_eda': '/path/to/run_task.py'}
     mock_svc.upsert_eda.assert_called_once_with(
         "TestSheet",
         "print('test')",
         "test_dataset",
-        ["Sheet1"],
+        [{"dataset": "test_dataset", "sheet": "Sheet1"}],
         "import pandas as pd"
     )
 
@@ -81,32 +82,23 @@ def test_workflow_run_eda(mock_svc):
     """Test workflow_run_eda function."""
     from oryxforge.tools.mcp import workflow_run_eda
 
-    mock_svc.run_task.return_value = {
-        'stdout': 'Success',
-        'stderr': '',
-        'returncode': 0
-    }
+    mock_svc.run_task.return_value = '/path/to/run_task.py'
 
     result = workflow_run_eda(sheet="TestSheet", dataset="test_dataset")
 
-    assert result['returncode'] == 0
+    assert result == {'file_python_eda': '/path/to/run_task.py'}
     mock_svc.run_task.assert_called_once_with(
         "TestSheet",
         'eda',
         dataset="test_dataset",
-        execute=True
+        execute=False
     )
 
 
-@patch('oryxforge.tools.mcp.get_user_id')
-@patch('oryxforge.tools.mcp.get_project_id')
 @patch('oryxforge.tools.mcp.ProjectService')
-def test_project_list_datasets(mock_project_service, mock_get_project_id, mock_get_user_id):
+def test_project_list_datasets(mock_project_service):
     """Test project_list_datasets function."""
     from oryxforge.tools.mcp import project_list_datasets
-
-    mock_get_user_id.return_value = "user123"
-    mock_get_project_id.return_value = "project456"
 
     mock_instance = Mock()
     mock_instance.ds_list.return_value = [
@@ -115,31 +107,134 @@ def test_project_list_datasets(mock_project_service, mock_get_project_id, mock_g
     ]
     mock_project_service.return_value = mock_instance
 
-    result = project_list_datasets()
+    result = project_list_datasets(
+        user_id='bf98d56b-1ef7-408d-b0a6-021934fddc24',
+        project_id='24d811e2-1801-4208-8030-a86abbda59b8'
+    )
 
     assert len(result) == 2
     assert result[0]['name'] == 'Dataset 1'
-    mock_project_service.assert_called_once_with("project456", "user123")
+    mock_project_service.assert_called_once_with(
+        '24d811e2-1801-4208-8030-a86abbda59b8',
+        'bf98d56b-1ef7-408d-b0a6-021934fddc24'
+    )
 
 
-@patch('oryxforge.tools.mcp.get_user_id')
-@patch('oryxforge.tools.mcp.get_project_id')
 @patch('oryxforge.tools.mcp.ProjectService')
-def test_project_create_sheet(mock_project_service, mock_get_project_id, mock_get_user_id):
+def test_project_create_sheet(mock_project_service):
     """Test project_create_sheet function."""
     from oryxforge.tools.mcp import project_create_sheet
-
-    mock_get_user_id.return_value = "user123"
-    mock_get_project_id.return_value = "project456"
 
     mock_instance = Mock()
     mock_instance.sheet_create.return_value = "sheet789"
     mock_project_service.return_value = mock_instance
 
-    result = project_create_sheet(dataset_id="ds1", name="New Sheet")
+    result = project_create_sheet(
+        user_id='bf98d56b-1ef7-408d-b0a6-021934fddc24',
+        project_id='24d811e2-1801-4208-8030-a86abbda59b8',
+        dataset_id="ds1",
+        name="New Sheet"
+    )
 
     assert result == "sheet789"
+    mock_project_service.assert_called_once_with(
+        '24d811e2-1801-4208-8030-a86abbda59b8',
+        'bf98d56b-1ef7-408d-b0a6-021934fddc24'
+    )
     mock_instance.sheet_create.assert_called_once_with("ds1", "New Sheet")
+
+
+@patch('oryxforge.tools.mcp.ProjectService')
+def test_project_create_dataset(mock_project_service):
+    """Test project_create_dataset function."""
+    from oryxforge.tools.mcp import project_create_dataset
+
+    mock_instance = Mock()
+    mock_instance.ds_create.return_value = "dataset123"
+    mock_project_service.return_value = mock_instance
+
+    result = project_create_dataset(
+        user_id='bf98d56b-1ef7-408d-b0a6-021934fddc24',
+        project_id='24d811e2-1801-4208-8030-a86abbda59b8',
+        name="New Dataset"
+    )
+
+    assert result == "dataset123"
+    mock_project_service.assert_called_once_with(
+        '24d811e2-1801-4208-8030-a86abbda59b8',
+        'bf98d56b-1ef7-408d-b0a6-021934fddc24'
+    )
+    mock_instance.ds_create.assert_called_once_with("New Dataset")
+
+
+@patch('oryxforge.tools.mcp.ProjectService')
+def test_project_get_dataset(mock_project_service):
+    """Test project_get_dataset function."""
+    from oryxforge.tools.mcp import project_get_dataset
+
+    mock_instance = Mock()
+    mock_instance.ds_get.return_value = {
+        'id': 'ds1',
+        'name': 'Test Dataset',
+        'name_python': 'test_dataset'
+    }
+    mock_project_service.return_value = mock_instance
+
+    result = project_get_dataset(
+        user_id='bf98d56b-1ef7-408d-b0a6-021934fddc24',
+        project_id='24d811e2-1801-4208-8030-a86abbda59b8',
+        name='Test Dataset'
+    )
+
+    assert result['name'] == 'Test Dataset'
+    mock_instance.ds_get.assert_called_once_with(id=None, name='Test Dataset', name_python=None)
+
+
+@patch('oryxforge.tools.mcp.ProjectService')
+def test_project_list_sheets(mock_project_service):
+    """Test project_list_sheets function."""
+    from oryxforge.tools.mcp import project_list_sheets
+
+    mock_instance = Mock()
+    mock_instance.sheet_list.return_value = [
+        {'id': 'sheet1', 'name': 'Sheet 1', 'name_python': 'Sheet1', 'dataset_id': 'ds1'},
+        {'id': 'sheet2', 'name': 'Sheet 2', 'name_python': 'Sheet2', 'dataset_id': 'ds1'}
+    ]
+    mock_project_service.return_value = mock_instance
+
+    result = project_list_sheets(
+        user_id='bf98d56b-1ef7-408d-b0a6-021934fddc24',
+        project_id='24d811e2-1801-4208-8030-a86abbda59b8',
+        dataset_id='ds1'
+    )
+
+    assert len(result) == 2
+    assert result[0]['name'] == 'Sheet 1'
+    mock_instance.sheet_list.assert_called_once_with('ds1', None, None)
+
+
+@patch('oryxforge.tools.mcp.ProjectService')
+def test_project_get_sheet(mock_project_service):
+    """Test project_get_sheet function."""
+    from oryxforge.tools.mcp import project_get_sheet
+
+    mock_instance = Mock()
+    mock_instance.sheet_get.return_value = {
+        'id': 'sheet1',
+        'name': 'Test Sheet',
+        'name_python': 'TestSheet',
+        'dataset_id': 'ds1'
+    }
+    mock_project_service.return_value = mock_instance
+
+    result = project_get_sheet(
+        user_id='bf98d56b-1ef7-408d-b0a6-021934fddc24',
+        project_id='24d811e2-1801-4208-8030-a86abbda59b8',
+        name='Test Sheet'
+    )
+
+    assert result['name'] == 'Test Sheet'
+    mock_instance.sheet_get.assert_called_once_with(dataset_id=None, id=None, name='Test Sheet', name_python=None)
 
 
 @patch('oryxforge.tools.mcp.svc')
@@ -159,6 +254,7 @@ def test_code_upsert_with_indented_code(mock_svc):
     """
 
     mock_svc.upsert_eda.return_value = "Success"
+    mock_svc.run_task.return_value = "/path/to/run_task.py"
 
     result = code_upsert_eda(
         sheet="TestSheet",
@@ -167,7 +263,7 @@ def test_code_upsert_with_indented_code(mock_svc):
     )
 
     # The service should have been called (dedent happens in WorkflowService)
-    assert result == "Success"
+    assert result == {'status': 'Success', 'file_python_eda': '/path/to/run_task.py'}
     mock_svc.upsert_eda.assert_called_once()
     # Verify the code was passed through
     call_args = mock_svc.upsert_eda.call_args
@@ -215,7 +311,7 @@ class TestMCPIntegration:
         from typing import Optional
 
         @test_mcp.tool
-        def code_upsert_eda(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
+        def code_upsert_eda(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[dict]] = None, imports: Optional[str] = None) -> str:
             if inputs is None:
                 inputs = []
             return test_svc.upsert_eda(sheet, code, dataset, inputs, imports)
@@ -225,7 +321,7 @@ class TestMCPIntegration:
             return test_svc.read(sheet, dataset, method='eda')
 
         @test_mcp.tool
-        def code_upsert_run(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[str]] = None, imports: Optional[str] = None) -> str:
+        def code_upsert_run(sheet: str, code: str, dataset: Optional[str] = None, inputs: Optional[list[dict]] = None, imports: Optional[str] = None) -> str:
             if inputs is None:
                 inputs = []
             return test_svc.upsert_run(sheet, code, dataset, inputs, imports)
@@ -344,3 +440,19 @@ class TestMCPIntegration:
             result_text = str(read_result)
             # Should not start with spaces after dedent
             assert "    # This has leading spaces" not in result_text or "# This has leading spaces" in result_text
+
+    @pytest.mark.asyncio
+    async def test_async_subprocess_integration(self):
+        """Test async subprocess execution via MCP (tests utest)."""
+        from oryxforge.tools.mcp import mcp
+
+        async with Client(mcp) as client:
+            result = await client.call_tool("utest", {})
+
+            assert result is not None
+            # Check if we got the expected structure
+            if hasattr(result, 'data'):
+                assert 'stdout' in result.data
+                assert 'returncode' in result.data
+                assert result.data['returncode'] == 0
+                assert '1' in result.data['stdout']  # Should print '1'

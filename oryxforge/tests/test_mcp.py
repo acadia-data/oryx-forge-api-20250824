@@ -51,9 +51,9 @@ class TestMCPBasicOperations:
         
         # Create second task with inputs
         result = create_sheet.fn(
-            sheet="TaskB", 
+            sheet="TaskB",
             code="df = pd.DataFrame({'b': [2]})",
-            inputs=["TaskA"]
+            inputs=[{"dataset": None, "sheet": "TaskA"}]
         )
         
         assert "Created TaskB in tasks/__init__.py" in result

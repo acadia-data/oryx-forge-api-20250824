@@ -32,7 +32,7 @@ class TestWorkflowServiceCore:
     def test_create_with_inputs(self, temp_service):
         """Test creating task with inputs."""
         temp_service.create("TaskA", {'run': "df_out = pd.DataFrame({'a': [1]})"})
-        temp_service.create("TaskB", {'run': "df_out = pd.DataFrame({'b': [2]})"}, inputs=["TaskA"])
+        temp_service.create("TaskB", {'run': "df_out = pd.DataFrame({'b': [2]})"}, inputs=[{"dataset": None, "sheet": "TaskA"}])
 
         # Check both tasks exist
         tasks = temp_service.list_sheets()
@@ -213,21 +213,31 @@ class TestWorkflowServiceModules:
 class TestWorkflowServiceNaming:
     """Test name sanitization functionality."""
 
-    def test_sanitize_task_name(self, temp_service):
+    def test_sanitize_task_name(self):
         """Test task name sanitization."""
-        temp_service.create("invalid-name with spaces", {'run': "df_out = pd.DataFrame()"})
+        temp_dir = tempfile.mkdtemp()
+        temp_service = WorkflowService(base_dir=temp_dir, sanitize=True)
+        try:
+            temp_service.create("invalid-name with spaces", {'run': "df_out = pd.DataFrame()"})
 
-        tasks = temp_service.list_sheets()
-        # Should be converted to PascalCase
-        assert any("Invalid" in task and "Name" in task for task in tasks)
+            tasks = temp_service.list_sheets()
+            # Should be converted to PascalCase
+            assert any("Invalid" in task and "Name" in task for task in tasks)
+        finally:
+            shutil.rmtree(temp_dir)
 
-    def test_sanitize_module_name(self, temp_service):
+    def test_sanitize_module_name(self):
         """Test module name sanitization."""
-        temp_service.create("TestTask", {'run': "df_out = pd.DataFrame()"}, dataset="Invalid-Module Name")
+        temp_dir = tempfile.mkdtemp()
+        temp_service = WorkflowService(base_dir=temp_dir, sanitize=True)
+        try:
+            temp_service.create("TestTask", {'run': "df_out = pd.DataFrame()"}, dataset="Invalid-Module Name")
 
-        modules = temp_service.list_datasets()
-        # Should be converted to snake_case
-        assert any("invalid" in mod and "module" in mod for mod in modules)
+            modules = temp_service.list_datasets()
+            # Should be converted to snake_case
+            assert any("invalid" in mod and "module" in mod for mod in modules)
+        finally:
+            shutil.rmtree(temp_dir)
 
 
 class TestWorkflowServiceEdgeCases:
@@ -677,7 +687,7 @@ class TestWorkflowServiceFlowExecution:
         """Test flow script generation with reset tasks using run_preview."""
         # Create multiple tasks
         temp_service.create("TaskA", {'run': "df_out = pd.DataFrame({'a': [1]})"})
-        temp_service.create("TaskB", {'run': "df_out = pd.DataFrame({'b': [2]})"}, inputs=["TaskA"])
+        temp_service.create("TaskB", {'run': "df_out = pd.DataFrame({'b': [2]})"}, inputs=[{"dataset": None, "sheet": "TaskA"}])
 
         script = temp_service.run_preview(
             "TaskB",
@@ -768,7 +778,7 @@ class TestWorkflowServiceFlowExecution:
         temp_service.create("GetData", {'run': "df_out = pd.DataFrame({'raw': [1, 2, 3, 4, 5]})"})
         temp_service.create("ProcessData",
                           {'run': "input_df = self.input()['GetData'].read()\ndf_out = input_df.copy()\ndf_out['processed'] = df_out['raw'] * 2"},
-                          inputs=["GetData"])
+                          inputs=[{"dataset": None, "sheet": "GetData"}])
 
         # Test that the complete flow script includes all necessary components
         script = temp_service.run_preview(
@@ -847,13 +857,13 @@ class TestWorkflowServiceFlowExecution:
         temp_service.create("RawData", {'run': "df_out = pd.DataFrame({'id': range(10), 'value': range(10, 20)})"})
         temp_service.create("CleanData",
                           {'run': "raw = self.input()['RawData'].read()\ndf_out = raw[raw['value'] > 12]"},
-                          inputs=["RawData"])
+                          inputs=[{"dataset": None, "sheet": "RawData"}])
         temp_service.create("FeatureData",
                           {'run': "clean = self.input()['CleanData'].read()\ndf_out = clean.copy()\ndf_out['feature'] = df_out['value'] ** 2"},
-                          inputs=["CleanData"])
+                          inputs=[{"dataset": None, "sheet": "CleanData"}])
         temp_service.create("ModelData",
                           {'run': "features = self.input()['FeatureData'].read()\ndf_out = features.copy()\ndf_out['prediction'] = df_out['feature'] * 0.1"},
-                          inputs=["FeatureData"])
+                          inputs=[{"dataset": None, "sheet": "FeatureData"}])
 
         # Test generating run script for the full chain with multiple resets
         script = temp_service.run_flow(

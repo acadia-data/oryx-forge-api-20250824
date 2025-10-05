@@ -205,8 +205,8 @@ def import_file(request: FileImportRequest):
     return result
 
 
-@app.post("/files/import")
-def import_file(request: FileImportRequest):
+@app.post("/data/load")
+def rt_data_load(request: FileImportRequest):
     from oryxforge.services.workflow_service import WorkflowService
     svc = WorkflowService()
     code = svc.run_load('hpi',execute=False,dataset='sources',file_out=None)

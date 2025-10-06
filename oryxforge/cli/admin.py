@@ -143,9 +143,7 @@ def pull_project(project_id: Optional[str], target_dir: str):
 
     try:
         # Activate project
-        cli_service_in_project = CLIService(cli_service.user_id, str(target_path))
-        cli_service_in_project.project_activate(project_id)
-
+ 
         # Auto-activate default dataset and first sheet
         try:
             default_dataset_id = project_service._get_default_dataset_id()

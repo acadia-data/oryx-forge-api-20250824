@@ -83,6 +83,7 @@ claude mcp remove oryxforge
 claude mcp remove mcp_server
 claude mcp remove OryxForge
 
+cd oryxforge/tools
 fastmcp run mcp_server.py
 fastmcp install claude-code mcp_server
 fastmcp install claude-code mcp_oryxforge.py

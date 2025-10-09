@@ -9,6 +9,7 @@ from loguru import logger
 from .utils import init_supabase_client
 from .repo_service import RepoService
 from .project_service import ProjectService
+from .iam import CredentialsManager
 
 
 class CLIService:
@@ -21,7 +22,7 @@ class CLIService:
         Initialize CLI service.
 
         Args:
-            user_id: User ID (if None, read from config)
+            user_id: User ID (if None, read from profile via CredentialsManager)
             cwd: Working directory (if None, use current directory)
         """
         self.cwd = Path(cwd) if cwd else Path.cwd()
@@ -30,10 +31,13 @@ class CLIService:
         if user_id:
             self.user_id = user_id
         else:
-            config = self.get_user_config()
-            if 'userid' not in config:
-                raise ValueError("No user ID configured. Run 'oryxforge admin userid set <userid>' first.")
-            self.user_id = config['userid']
+            # Get user_id from profile via CredentialsManager
+            creds_manager = CredentialsManager(working_dir=str(self.cwd))
+            try:
+                profile = creds_manager.get_profile()
+                self.user_id = profile['user_id']
+            except ValueError as e:
+                raise ValueError(f"No profile configured. Run 'oryxforge admin profile set --userid <userid> --projectid <projectid>' first. {str(e)}")
 
         # Initialize Supabase client
         self.supabase_client = init_supabase_client()
@@ -52,112 +56,9 @@ class CLIService:
             raise ValueError(f"Failed to validate user ID {self.user_id}: {str(e)}")
 
     @property
-    def config_dir(self) -> Path:
-        """Get global configuration directory."""
-        return Path.home() / '.oryxforge'
-
-    @property
-    def config_file(self) -> Path:
-        """Get global configuration file path."""
-        return self.config_dir / 'cfg.ini'
-
-    @property
     def project_config_file(self) -> Path:
         """Get project-specific configuration file path."""
-        return self.cwd / '.oryxforge'
-
-    def get_user_config(self) -> Dict[str, str]:
-        """
-        Read user configuration from global config file.
-
-        Returns:
-            Dict with user configuration
-        """
-        if not self.config_file.exists():
-            return {}
-
-        config = ConfigObj(str(self.config_file))
-        return dict(config.get('user', {}))
-
-    def get_user_id(self) -> Optional[str]:
-        """
-        Get the current user ID from configuration or instance.
-
-        Returns:
-            str: User ID if configured, None if not set
-
-        Raises:
-            ValueError: If configuration file exists but is corrupted
-        """
-        try:
-            # Return instance user_id if available
-            if hasattr(self, 'user_id') and self.user_id:
-                return self.user_id
-
-            # Try to get from config file
-            config = self.get_user_config()
-            return config.get('userid')
-        except Exception as e:
-            raise ValueError(f"Failed to get user ID: {str(e)}")
-
-    @staticmethod
-    def get_configured_user_id() -> Optional[str]:
-        """
-        Get the user ID from global configuration without initializing CLIService.
-
-        Returns:
-            str: User ID if configured, None if not set
-
-        Raises:
-            ValueError: If configuration file exists but is corrupted
-        """
-        try:
-            config_dir = Path.home() / '.oryxforge'
-            config_file = config_dir / 'cfg.ini'
-
-            if not config_file.exists():
-                return None
-
-            config = ConfigObj(str(config_file))
-            user_config = config.get('user', {})
-            return user_config.get('userid')
-        except Exception as e:
-            raise ValueError(f"Failed to read user configuration: {str(e)}")
-
-    def set_user_config(self, user_id: str) -> None:
-        """
-        Set user ID in global configuration.
-
-        Args:
-            user_id: User ID to store
-
-        Raises:
-            ValueError: If user_id doesn't exist in database
-        """
-        # Create a temporary instance to validate user
-        temp_service = CLIService.__new__(CLIService)
-        temp_service.user_id = user_id
-        temp_service.supabase_client = init_supabase_client()
-        temp_service._validate_user()
-
-        # Create config directory if it doesn't exist
-        self.config_dir.mkdir(parents=True, exist_ok=True)
-
-        # Read existing config or create new
-        config = ConfigObj()
-        if self.config_file.exists():
-            config = ConfigObj(str(self.config_file))
-
-        # Set user config
-        if 'user' not in config:
-            config['user'] = {}
-        config['user']['userid'] = user_id
-
-        # Write config
-        config.filename = str(self.config_file)
-        config.write()
-
-        logger.success(f"User ID {user_id} saved to {self.config_file}")
+        return self.cwd / '.oryxforge.cfg'
 
     def projects_create(self, name: str, setup_repo: bool = True) -> str:
         """
@@ -218,7 +119,7 @@ class CLIService:
 
     def project_activate(self, project_id: str) -> None:
         """
-        Activate a project by updating local configuration.
+        Activate a project by updating local configuration using CredentialsManager.
 
         Args:
             project_id: Project ID to activate
@@ -229,19 +130,9 @@ class CLIService:
         if not self.project_exists(project_id):
             raise ValueError(f"Project {project_id} not found or access denied")
 
-        # Read existing config or create new
-        config = ConfigObj()
-        if self.project_config_file.exists():
-            config = ConfigObj(str(self.project_config_file))
-
-        # Set active project
-        if 'active' not in config:
-            config['active'] = {}
-        config['active']['project_id'] = project_id
-
-        # Write config
-        config.filename = str(self.project_config_file)
-        config.write()
+        # Use CredentialsManager to set profile
+        creds_manager = CredentialsManager(working_dir=str(self.cwd))
+        creds_manager.set_profile(user_id=self.user_id, project_id=project_id)
 
         logger.success(f"Activated project {project_id}")
 
@@ -326,13 +217,28 @@ class CLIService:
         Get active project, dataset, and datasheet from local configuration.
 
         Returns:
-            Dict with active IDs (empty dict if no config)
+            Dict with active IDs including user_id and project_id from profile
         """
-        if not self.project_config_file.exists():
+        # Get profile from CredentialsManager
+        try:
+            creds_manager = CredentialsManager(working_dir=str(self.cwd))
+            profile = creds_manager.get_profile()
+        except ValueError:
+            # No profile set, return empty dict
             return {}
 
-        config = ConfigObj(str(self.project_config_file))
-        return dict(config.get('active', {}))
+        # Also get dataset and sheet from config if exists
+        result = {'user_id': profile['user_id'], 'project_id': profile['project_id']}
+
+        if self.project_config_file.exists():
+            config = ConfigObj(str(self.project_config_file))
+            active_section = config.get('active', {})
+            if 'dataset_id' in active_section:
+                result['dataset_id'] = active_section['dataset_id']
+            if 'sheet_id' in active_section:
+                result['sheet_id'] = active_section['sheet_id']
+
+        return result
 
     def interactive_project_select(self) -> str:
         """

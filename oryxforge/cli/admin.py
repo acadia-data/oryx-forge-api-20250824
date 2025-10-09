@@ -31,39 +31,64 @@ def admin():
 
 
 @admin.group()
-def userid():
-    """User ID management commands."""
+def profile():
+    """Profile management commands (user_id and project_id)."""
     pass
 
 
-@userid.command('set')
-@click.argument('user_id')
+@profile.command('set')
+@click.option('--userid', required=True, help='User ID from web UI profile dropdown')
+@click.option('--projectid', required=True, help='Project ID to activate')
 @handle_errors
-def set_userid(user_id: str):
+def set_profile(userid: str, projectid: str):
     """
-    Set the user ID for CLI operations.
+    Set the user profile (user_id and project_id) for CLI operations.
 
     Args:
-        user_id: UUID of the user from Supabase auth.users table
+        userid: UUID of the user from Supabase auth.users table
+        projectid: UUID of the project to activate
     """
-    cli_service = CLIService.__new__(CLIService)
-    cli_service._CLIService__init__ = lambda: None  # Skip normal init
-    cli_service.set_user_config(user_id)
-    click.echo(f"✅ User ID set successfully: {user_id}")
+    from ..services.iam import CredentialsManager
+    from pathlib import Path
+
+    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    creds_manager.set_profile(user_id=userid, project_id=projectid)
+    click.echo(f"✅ Profile set successfully")
+    click.echo(f"   User ID: {userid}")
+    click.echo(f"   Project ID: {projectid}")
 
 
-@userid.command('get')
+@profile.command('get')
 @handle_errors
-def get_userid():
+def get_profile():
     """
-    Get the current user ID from configuration.
+    Get the current profile (user_id and project_id) from configuration.
     """
-    user_id = CLIService.get_configured_user_id()
+    from ..services.iam import CredentialsManager
+    from pathlib import Path
 
-    if user_id:
-        click.echo(f"Current user ID: {user_id}")
-    else:
-        click.echo("No user ID configured. Run 'oryxforge admin userid set <userid>' to set one. You can get <userid> from the web UI in the user profile.")
+    try:
+        creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+        profile_data = creds_manager.get_profile()
+        click.echo(f"Current profile:")
+        click.echo(f"  User ID: {profile_data['user_id']}")
+        click.echo(f"  Project ID: {profile_data['project_id']}")
+    except ValueError as e:
+        click.echo(f"No profile configured.\n{str(e)}")
+
+
+@profile.command('clear')
+@handle_errors
+def clear_profile():
+    """
+    Clear the current profile configuration.
+    """
+    from ..services.iam import CredentialsManager
+    from pathlib import Path
+
+    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    creds_manager.clear_profile()
+    click.echo("✅ Profile cleared")
 
 
 @admin.group()
@@ -125,8 +150,8 @@ def pull_project(project_id: Optional[str], target_dir: str):
     if not cli_service.project_exists(project_id):
         raise ValueError(f"Project {project_id} not found or access denied")
 
-    # Initialize project service
-    project_service = ProjectService(project_id, cli_service.user_id)
+    # Initialize project service (uses CredentialsManager from current directory)
+    project_service = ProjectService(project_id=project_id, user_id=cli_service.user_id)
 
     # Check if project is initialized, initialize if needed
     if not project_service.is_initialized():
@@ -166,12 +191,44 @@ def pull_project(project_id: Optional[str], target_dir: str):
 
 
 @admin.group()
-def dataset():
+def datasets():
     """Dataset management commands."""
     pass
 
 
-@dataset.command('activate')
+@datasets.command('list')
+@handle_errors
+def list_datasets():
+    """List all datasets for the current project."""
+    from ..services.iam import CredentialsManager
+
+    # Get profile for user_id and project_id
+    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    profile = creds_manager.get_profile()
+
+    # Initialize ProjectService
+    project_service = ProjectService(
+        project_id=profile['project_id'],
+        user_id=profile['user_id']
+    )
+
+    # Get datasets list
+    datasets = project_service.ds_list()
+
+    if not datasets:
+        click.echo("No datasets found for this project.")
+        return
+
+    click.echo("\nDatasets:")
+    click.echo("=" * 80)
+    for dataset in datasets:
+        click.echo(f"ID: {dataset['id']}")
+        click.echo(f"  Name: {dataset['name']}")
+        click.echo(f"  Python Name: {dataset['name_python']}")
+        click.echo("-" * 80)
+
+
+@datasets.command('activate')
 @click.option('--id', 'dataset_id', help='Dataset ID to activate')
 @click.option('--name', 'dataset_name', help='Dataset name to activate')
 @handle_errors
@@ -188,7 +245,7 @@ def activate_dataset(dataset_id: Optional[str], dataset_name: Optional[str]):
     if 'project_id' not in active_config:
         raise ValueError("No active project. Run 'oryxforge admin pull' first.")
 
-    project_service = ProjectService(active_config['project_id'], cli_service.user_id)
+    project_service = ProjectService(project_id=active_config['project_id'], user_id=cli_service.user_id)
 
     # Determine dataset ID
     if dataset_id:
@@ -218,12 +275,52 @@ def activate_dataset(dataset_id: Optional[str], dataset_name: Optional[str]):
 
 
 @admin.group()
-def sheet():
+def sheets():
     """Datasheet management commands."""
     pass
 
 
-@sheet.command('activate')
+@sheets.command('list')
+@click.option('--dataset-id', help='Dataset ID to filter sheets by')
+@handle_errors
+def list_sheets(dataset_id: Optional[str]):
+    """
+    List all datasheets for the current project.
+
+    Optionally filter by dataset using --dataset-id.
+    """
+    from ..services.iam import CredentialsManager
+
+    # Get profile for user_id and project_id
+    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    profile = creds_manager.get_profile()
+
+    # Initialize ProjectService
+    project_service = ProjectService(
+        project_id=profile['project_id'],
+        user_id=profile['user_id']
+    )
+
+    # Get sheets list (optionally filtered by dataset_id)
+    sheets = project_service.sheet_list(dataset_id=dataset_id)
+
+    if not sheets:
+        context = f"dataset {dataset_id}" if dataset_id else "this project"
+        click.echo(f"No datasheets found in {context}.")
+        return
+
+    context_msg = f"Datasheets for dataset {dataset_id}" if dataset_id else "All Datasheets"
+    click.echo(f"\n{context_msg}:")
+    click.echo("=" * 80)
+    for sheet in sheets:
+        click.echo(f"ID: {sheet['id']}")
+        click.echo(f"  Name: {sheet['name']}")
+        click.echo(f"  Python Name: {sheet['name_python']}")
+        click.echo(f"  Dataset ID: {sheet['dataset_id']}")
+        click.echo("-" * 80)
+
+
+@sheets.command('activate')
 @click.option('--id', 'sheet_id', help='Datasheet ID to activate')
 @click.option('--name', 'sheet_name', help='Datasheet name to activate')
 @handle_errors
@@ -240,7 +337,7 @@ def activate_sheet(sheet_id: Optional[str], sheet_name: Optional[str]):
     if 'project_id' not in active_config:
         raise ValueError("No active project. Run 'oryxforge admin pull' first.")
 
-    project_service = ProjectService(active_config['project_id'], cli_service.user_id)
+    project_service = ProjectService(project_id=active_config['project_id'], user_id=cli_service.user_id)
 
     # Get active dataset if available
     active_dataset_id = active_config.get('dataset_id')
@@ -279,20 +376,26 @@ def activate_sheet(sheet_id: Optional[str], sheet_name: Optional[str]):
 @handle_errors
 def show_status():
     """Show current configuration status."""
+    from ..services.iam import CredentialsManager
+
+    # Show profile info
+    try:
+        creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+        profile = creds_manager.get_profile()
+        click.echo(f"User ID: {profile.get('user_id', 'Not set')}")
+        click.echo(f"Project ID: {profile.get('project_id', 'Not set')}")
+    except ValueError:
+        click.echo("User ID: Not set")
+        click.echo("Project ID: Not set")
+        click.echo("\nNo profile configured. Run 'oryxforge admin profile set --userid <userid> --projectid <projectid>'")
+        return
+
+    # Show active dataset/sheet info
     cli_service = CLIService()
-
-    # Show user info
-    config = cli_service.get_user_config()
-    click.echo(f"User ID: {config.get('userid', 'Not set')}")
-
-    # Show active project info
     active_config = cli_service.get_active()
     if active_config:
-        click.echo(f"Active Project: {active_config.get('project_id', 'None')}")
         click.echo(f"Active Dataset: {active_config.get('dataset_id', 'None')}")
         click.echo(f"Active Datasheet: {active_config.get('sheet_id', 'None')}")
-    else:
-        click.echo("No active project configuration found")
 
     # Show working directory
     click.echo(f"Working Directory: {Path.cwd()}")

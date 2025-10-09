@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from ..services.project_service import ProjectService
 from ..services.utils import init_supabase_client
+from ..services.iam import CredentialsManager
 
 
 class TestProjectService:
@@ -37,11 +38,23 @@ class TestProjectService:
         return None
 
     @pytest.fixture
-    def project_service(self, test_project_id):
+    def temp_working_dir(self):
+        """Create temporary working directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def project_service(self, test_project_id, temp_working_dir):
         """Create ProjectService instance for integration testing."""
         if not test_project_id:
             pytest.skip("No test project available - please create a project for user 24d811e2-1801-4208-8030-a86abbda59b8")
-        return ProjectService(test_project_id, self.USER_ID)
+
+        # Set up profile using CredentialsManager
+        creds_manager = CredentialsManager(working_dir=temp_working_dir)
+        creds_manager.set_profile(user_id=self.USER_ID, project_id=test_project_id)
+
+        # Create ProjectService - it will read from CredentialsManager
+        return ProjectService(working_dir=temp_working_dir)
 
     @pytest.fixture
     def test_dataset_name(self):
@@ -61,17 +74,25 @@ class TestProjectService:
         assert project_service.user_id == self.USER_ID
         assert project_service.project_name is not None
 
-    def test_init_gcs_error(self, test_project_id):
+    def test_init_gcs_error(self, test_project_id, temp_working_dir):
         """Test initialization with GCS error."""
+        # Set up profile
+        creds_manager = CredentialsManager(working_dir=temp_working_dir)
+        creds_manager.set_profile(user_id=self.USER_ID, project_id=test_project_id)
+
         with patch('gcsfs.GCSFileSystem', side_effect=Exception("GCS error")):
-            service = ProjectService(test_project_id, self.USER_ID)
+            service = ProjectService(working_dir=temp_working_dir)
             assert service.gcs is None
 
-    def test_init_with_invalid_project(self):
+    def test_init_with_invalid_project(self, temp_working_dir):
         """Test initialization with invalid project."""
+        # Set up profile with invalid project ID
+        creds_manager = CredentialsManager(working_dir=temp_working_dir)
+        creds_manager.set_profile(user_id=self.USER_ID, project_id='00000000-0000-0000-0000-000000000000')
+
         # Use valid UUID format but non-existent project
         with pytest.raises(ValueError, match="Failed to validate project"):
-            ProjectService('00000000-0000-0000-0000-000000000000', self.USER_ID)
+            ProjectService(working_dir=temp_working_dir)
 
     def test_validate_project_success(self, project_service):
         """Test successful project validation."""

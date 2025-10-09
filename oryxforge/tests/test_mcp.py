@@ -1,330 +1,184 @@
+"""Tests for MCP tools - project management functions."""
+
 import pytest
 import tempfile
-import shutil
-import os
 from pathlib import Path
-from oryxforge.tools.mcp import (
-    create_sheet, read_sheet, update_sheet, delete_sheet, upsert_sheet,
-    list_sheets, list_datasets, list_sheets_by_dataset, rename_sheet,
-    get_working_directory, get_tasks_directory, list_directory,
-    create_run, create_preview, execute_run, execute_preview, preview_flow
-)
+from unittest.mock import Mock, patch, MagicMock
+
+from oryxforge.services.iam import CredentialsManager
 
 
-@pytest.fixture
-def temp_dir():
-    """Create and cleanup temporary directory."""
-    temp_path = tempfile.mkdtemp()
-    original_cwd = Path.cwd()
-    try:
-        # Change to temp directory for MCP operations
-        os.chdir(temp_path)
-        # Reinitialize the MCP service with the new directory
-        from oryxforge.tools import mcp
-        from oryxforge.services.workflow_service import WorkflowService
-        mcp.svc = WorkflowService(base_dir=str(temp_path))
-        yield temp_path
-    finally:
-        os.chdir(original_cwd)
-        shutil.rmtree(temp_path)
+class TestMCPProjectFunctions:
+    """Test MCP project management functions."""
 
+    @pytest.fixture
+    def temp_dir(self):
+        """Create temporary directory for config files."""
+        with tempfile.TemporaryDirectory() as temp_path:
+            yield temp_path
 
-class TestMCPBasicOperations:
-    """Test basic MCP sheet operations."""
-
-    def test_create_sheet(self, temp_dir):
-        """Test creating a sheet via MCP."""
-        result = create_sheet.fn(
-            sheet="TestTask",
-            code="df = pd.DataFrame({'x': [1, 2, 3]})"
+    @pytest.fixture
+    def setup_profile(self, temp_dir):
+        """Setup test profile in temporary directory."""
+        creds_manager = CredentialsManager(working_dir=temp_dir)
+        creds_manager.set_profile(
+            user_id="test-user-123",
+            project_id="test-project-456"
         )
-        
-        assert "Created TestTask in tasks/__init__.py" in result
+        return temp_dir
 
-    def test_create_sheet_with_inputs(self, temp_dir):
-        """Test creating sheet with inputs via MCP."""
-        # Create first task
-        create_sheet.fn(
-            sheet="TaskA",
-            code="df = pd.DataFrame({'a': [1]})"
-        )
-        
-        # Create second task with inputs
-        result = create_sheet.fn(
-            sheet="TaskB",
-            code="df = pd.DataFrame({'b': [2]})",
-            inputs=[{"dataset": None, "sheet": "TaskA"}]
-        )
-        
-        assert "Created TaskB in tasks/__init__.py" in result
+    @pytest.fixture
+    def mock_project_service(self):
+        """Mock ProjectService to avoid database calls."""
+        with patch('oryxforge.tools.mcp.ProjectService') as mock:
+            yield mock
 
-    def test_read_sheet(self, temp_dir):
-        """Test reading sheet via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="ReadTask",
-            code="df = pd.DataFrame({'test': [1]})"
-        )
-        
-        # Read task
-        result = read_sheet.fn(task="ReadTask")
-        assert "pd.DataFrame" in result
-        assert "test" in result
+    def test_project_create_dataset(self, setup_profile, mock_project_service, monkeypatch):
+        """Test creating a dataset via MCP."""
+        # Change to temp directory
+        monkeypatch.chdir(setup_profile)
 
-    def test_update_sheet(self, temp_dir):
-        """Test updating sheet via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="UpdateTask",
-            code="df = pd.DataFrame({'old': [1]})"
-        )
-        
-        # Update task
-        result = update_sheet.fn(
-            sheet="UpdateTask",
-            new_code="df = pd.DataFrame({'new': [2]})"
-        )
-        
-        assert "Updated UpdateTask in tasks/__init__.py" in result
-        
-        # Verify update
-        read_result = read_sheet.fn(task="UpdateTask")
-        assert "new" in read_result
-        assert "old" not in read_result
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.ds_create.return_value = "dataset-id-123"
+        mock_project_service.return_value = mock_instance
 
-    def test_delete_sheet(self, temp_dir):
-        """Test deleting sheet via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="DeleteTask",
-            code="df = pd.DataFrame()"
-        )
-        
-        # Delete task
-        result = delete_sheet.fn(task="DeleteTask")
-        assert "Deleted task DeleteTask" in result
+        from oryxforge.tools.mcp import project_create_dataset
 
-    def test_upsert_create(self, temp_dir):
-        """Test upsert creating new sheet via MCP."""
-        result = upsert_sheet.fn(
-            sheet="NewTask",
-            code="df = pd.DataFrame({'new': [1]})"
-        )
-        
-        assert "Created NewTask in tasks/__init__.py" in result
+        result = project_create_dataset(name="Test Dataset")
 
-    def test_upsert_update(self, temp_dir):
-        """Test upsert updating existing sheet via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="ExistingTask",
-            code="df = pd.DataFrame({'old': [1]})"
-        )
-        
-        # Upsert task
-        result = upsert_sheet.fn(
-            sheet="ExistingTask",
-            code="df = pd.DataFrame({'updated': [2]})"
-        )
-        
-        assert "Updated ExistingTask in tasks/__init__.py" in result
+        assert result == "dataset-id-123"
+        mock_instance.ds_create.assert_called_once_with("Test Dataset")
 
+    def test_project_create_sheet(self, setup_profile, mock_project_service, monkeypatch):
+        """Test creating a datasheet via MCP."""
+        monkeypatch.chdir(setup_profile)
 
-class TestMCPDatasetOperations:
-    """Test MCP dataset-specific operations."""
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.sheet_create.return_value = "sheet-id-789"
+        mock_project_service.return_value = mock_instance
 
-    def test_create_in_dataset(self, temp_dir):
-        """Test creating sheet in specific dataset via MCP."""
-        result = create_sheet.fn(
-            sheet="ModuleTask",
-            code="df = pd.DataFrame()",
-            dataset="test_dataset"
-        )
-        
-        assert "Created ModuleTask in test_dataset" in result
+        from oryxforge.tools.mcp import project_create_sheet
 
-    def test_list_sheets(self, temp_dir):
-        """Test listing sheets via MCP."""
-        # Create some tasks
-        create_sheet.fn(
-            sheet="Task1",
-            code="df = pd.DataFrame()"
-        )
-        create_sheet.fn(
-            sheet="Task2", 
-            code="df = pd.DataFrame()"
-        )
-        
-        # List tasks in default module
-        result = list_sheets.fn()
-        assert isinstance(result, list)
-        assert "Task1" in result
-        assert "Task2" in result
+        result = project_create_sheet(dataset_id="dataset-123", name="Test Sheet")
 
-    def test_list_datasets(self, temp_dir):
+        assert result == "sheet-id-789"
+        mock_instance.sheet_create.assert_called_once_with("dataset-123", "Test Sheet")
+
+    def test_project_list_datasets(self, setup_profile, mock_project_service, monkeypatch):
         """Test listing datasets via MCP."""
-        # Create tasks in different modules
-        create_sheet.fn(
-            sheet="Task1",
-            code="df = pd.DataFrame()",
-            dataset="dataset_a"
-        )
-        create_sheet.fn(
-            sheet="Task2",
-            code="df = pd.DataFrame()",
-            dataset="dataset_b"
-        )
-        
-        # List modules
-        result = list_datasets.fn()
-        assert isinstance(result, list)
-        assert "dataset_a" in result
-        assert "dataset_b" in result
+        monkeypatch.chdir(setup_profile)
+
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.ds_list.return_value = [
+            {"id": "ds1", "name": "Dataset 1", "name_python": "dataset_1"},
+            {"id": "ds2", "name": "Dataset 2", "name_python": "dataset_2"}
+        ]
+        mock_project_service.return_value = mock_instance
+
+        from oryxforge.tools.mcp import project_list_datasets
+
+        result = project_list_datasets()
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Dataset 1"
+        assert result[1]["name"] == "Dataset 2"
+        mock_instance.ds_list.assert_called_once()
+
+    def test_project_get_dataset(self, setup_profile, mock_project_service, monkeypatch):
+        """Test getting a dataset by name via MCP."""
+        monkeypatch.chdir(setup_profile)
+
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.ds_get.return_value = {
+            "id": "ds1",
+            "name": "Test Dataset",
+            "name_python": "test_dataset"
+        }
+        mock_project_service.return_value = mock_instance
+
+        from oryxforge.tools.mcp import project_get_dataset
+
+        result = project_get_dataset(name="Test Dataset")
+
+        assert result["id"] == "ds1"
+        assert result["name"] == "Test Dataset"
+        mock_instance.ds_get.assert_called_once_with(id=None, name="Test Dataset", name_python=None)
+
+    def test_project_list_sheets(self, setup_profile, mock_project_service, monkeypatch):
+        """Test listing sheets via MCP."""
+        monkeypatch.chdir(setup_profile)
+
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.sheet_list.return_value = [
+            {"id": "sh1", "name": "Sheet 1", "name_python": "sheet_1", "dataset_id": "ds1"},
+            {"id": "sh2", "name": "Sheet 2", "name_python": "sheet_2", "dataset_id": "ds1"}
+        ]
+        mock_project_service.return_value = mock_instance
+
+        from oryxforge.tools.mcp import project_list_sheets
+
+        result = project_list_sheets(dataset_id="ds1")
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Sheet 1"
+        assert result[1]["name"] == "Sheet 2"
+        mock_instance.sheet_list.assert_called_once_with("ds1", None, None)
+
+    def test_project_get_sheet(self, setup_profile, mock_project_service, monkeypatch):
+        """Test getting a sheet by name via MCP."""
+        monkeypatch.chdir(setup_profile)
+
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.sheet_get.return_value = {
+            "id": "sh1",
+            "name": "Test Sheet",
+            "name_python": "test_sheet",
+            "dataset_id": "ds1"
+        }
+        mock_project_service.return_value = mock_instance
+
+        from oryxforge.tools.mcp import project_get_sheet
+
+        result = project_get_sheet(dataset_id="ds1", name="Test Sheet")
+
+        assert result["id"] == "sh1"
+        assert result["name"] == "Test Sheet"
+        mock_instance.sheet_get.assert_called_once_with(dataset_id="ds1", id=None, name="Test Sheet", name_python=None)
+
+    def test_project_functions_use_profile(self, setup_profile, mock_project_service, monkeypatch):
+        """Test that project functions use profile from CredentialsManager."""
+        monkeypatch.chdir(setup_profile)
+
+        # Setup mock
+        mock_instance = MagicMock()
+        mock_instance.ds_list.return_value = []
+        mock_project_service.return_value = mock_instance
+
+        from oryxforge.tools.mcp import project_list_datasets
+
+        # Call function - it should use CredentialsManager to get user_id and project_id
+        project_list_datasets()
+
+        # Verify ProjectService was called without explicit user_id/project_id
+        # (it gets them from CredentialsManager internally)
+        mock_project_service.assert_called_once()
+
+    def test_project_create_dataset_no_profile(self, temp_dir, monkeypatch):
+        """Test that project functions fail without profile."""
+        monkeypatch.chdir(temp_dir)
+
+        from oryxforge.tools.mcp import project_create_dataset
+
+        # Should raise error when no profile is configured
+        with pytest.raises(ValueError, match="No profile configured"):
+            project_create_dataset(name="Test Dataset")
 
 
-class TestMCPUtilityOperations:
-    """Test MCP utility functions."""
-
-    def test_get_working_directory(self, temp_dir):
-        """Test getting working directory via MCP."""
-        result = get_working_directory.fn()
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_get_tasks_directory(self, temp_dir):
-        """Test getting tasks directory via MCP."""
-        result = get_tasks_directory.fn()
-        assert isinstance(result, str)
-        assert "tasks" in result
-
-    def test_list_directory(self, temp_dir):
-        """Test listing directory contents via MCP."""
-        result = list_directory.fn()
-        assert isinstance(result, list)
-
-
-class TestMCPEdgeCases:
-    """Test MCP edge cases and error handling."""
-
-    def test_read_nonexistent_task(self, temp_dir):
-        """Test reading non-existent task via MCP."""
-        with pytest.raises(Exception):  # Should raise an error
-            read_sheet.fn(task="NonExistentTask")
-
-    def test_update_nonexistent_task(self, temp_dir):
-        """Test updating non-existent task via MCP."""
-        with pytest.raises(Exception):  # Should raise an error
-            update_sheet.fn(
-                sheet="NonExistentTask",
-                new_code="df = pd.DataFrame()"
-            )
-
-    def test_delete_nonexistent_task(self, temp_dir):
-        """Test deleting non-existent task via MCP."""
-        with pytest.raises(Exception):  # Should raise an error
-            delete_sheet.fn(task="NonExistentTask")
-
-
-class TestMCPFlowExecution:
-    """Test MCP flow execution functionality."""
-
-    def test_create_preview_basic(self, temp_dir):
-        """Test creating preview script via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="FlowTask",
-            code="df = pd.DataFrame({'flow': [1, 2, 3]})"
-        )
-        
-        # Generate preview script
-        result = create_preview.fn(
-            sheet="FlowTask",
-            flow_params={"model": "test"},
-            reset_tasks=["FlowTask"]
-        )
-        assert isinstance(result, str)
-        assert "flow.preview()" in result
-        assert "import d6tflow" in result
-
-    def test_create_run_basic(self, temp_dir):
-        """Test creating run script via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="RunFlowTask", 
-            code="df = pd.DataFrame({'run': [1, 2, 3]})"
-        )
-        
-        # Generate run script
-        result = create_run.fn(
-            sheet="RunFlowTask",
-            flow_params={"test": "run"},
-            reset_tasks=[]
-        )
-        assert isinstance(result, str)
-        assert "flow.run()" in result
-        assert "import d6tflow" in result
-
-    def test_create_preview_with_module(self, temp_dir):
-        """Test creating preview script with specific module via MCP."""
-        # Create task in module
-        create_sheet.fn(
-            sheet="ModuleFlowTask",
-            code="df = pd.DataFrame({'module': [1]})",
-            dataset="flow_module"
-        )
-        
-        # Generate preview script with module
-        result = create_preview.fn(
-            sheet="ModuleFlowTask",
-            dataset="flow_module",
-            flow_params={},
-            reset_tasks=[]
-        )
-        assert isinstance(result, str)
-        assert "import tasks.flow_module as tasks" in result
-        assert "flow.preview()" in result
-
-    def test_execute_preview_basic(self, temp_dir):
-        """Test executing preview script via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="ExecuteTask",
-            code="df = pd.DataFrame({'execute': [1]})"
-        )
-        
-        # Generate script
-        script = create_preview.fn(task="ExecuteTask")
-        
-        # Execute script - may fail if d6tflow not available
-        try:
-            result = execute_preview.fn(script)
-            assert isinstance(result, str)
-        except Exception:
-            # Expected if d6tflow not available
-            pass
-    
-    def test_flow_nonexistent_task(self, temp_dir):
-        """Test flow script generation with non-existent task via MCP."""
-        # Should raise an error for non-existent task
-        with pytest.raises(Exception):
-            create_preview.fn(task="NonExistentFlowTask")
-    
-    def test_preview_flow_end_to_end(self, temp_dir):
-        """Test complete preview flow via MCP."""
-        # Create task first
-        create_sheet.fn(
-            sheet="EndToEndTask",
-            code="df = pd.DataFrame({'e2e': [1]})"
-        )
-        
-        # Test end-to-end preview flow
-        try:
-            result = preview_flow.fn(
-                sheet="EndToEndTask",
-                flow_params={"test": "e2e"},
-                reset_tasks=[]
-            )
-            assert isinstance(result, str)
-        except Exception:
-            # Expected if d6tflow not available
-            pass
+if __name__ == '__main__':
+    pytest.main([__file__])

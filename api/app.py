@@ -86,6 +86,66 @@ class FileImportRequest(BaseFileRequest):
     settings_load: dict
     settings_save: dict
 
+
+# Profile management models
+class ProfileRequest(BaseModel):
+    user_id: str
+    project_id: str
+
+
+class DataContextRequest(ProfileRequest):
+    dataset: str
+    sheet: str
+
+
+@app.post("/profile/set")
+def set_profile(request: ProfileRequest):
+    """
+    Set profile configuration (user_id and project_id).
+
+    This endpoint allows setting the profile which can be used by other endpoints.
+    The profile is written to the .oryxforge file in the working directory.
+    """
+    from oryxforge.services.iam import CredentialsManager
+    from pathlib import Path
+
+    # Use current working directory for profile config
+    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    creds_manager.set_profile(user_id=request.user_id, project_id=request.project_id)
+
+    return {
+        "status": "success",
+        "message": "Profile set successfully",
+        "user_id": request.user_id,
+        "project_id": request.project_id
+    }
+
+
+@app.post("/data/context")
+def get_data_context(request: DataContextRequest):
+    """
+    Example endpoint that takes profile + dataset and sheet parameters.
+
+    This demonstrates how profile can be set per request and used with additional context.
+    """
+    from oryxforge.services.iam import CredentialsManager
+    from pathlib import Path
+
+    # Set profile from request
+    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    creds_manager.set_profile(user_id=request.user_id, project_id=request.project_id)
+
+    # For now, just return the context
+    return {
+        "status": "success",
+        "user_id": request.user_id,
+        "project_id": request.project_id,
+        "dataset": request.dataset,
+        "sheet": request.sheet,
+        "message": "Context received successfully"
+    }
+
+
 @app.post("/llm")
 def get_llm_stream(request: PromptRequest):
     """

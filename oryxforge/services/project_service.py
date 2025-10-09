@@ -11,6 +11,7 @@ from loguru import logger
 from .workflow_service import WorkflowService
 from .repo_service import RepoService
 from .utils import init_supabase_client
+from .iam import CredentialsManager
 
 
 class ProjectService:
@@ -18,19 +19,29 @@ class ProjectService:
     Service class for project-level operations including datasets, datasheets, and git operations.
     """
 
-    def __init__(self, project_id: str, user_id: str):
+    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None):
         """
         Initialize project service.
 
+        Gets user_id and project_id from CredentialsManager if not provided.
+
         Args:
-            project_id: Project ID
-            user_id: User ID
+            project_id: Project ID (if None, read from profile)
+            user_id: User ID (if None, read from profile)
+            working_dir: Working directory for CredentialsManager (if None, use current directory)
 
         Raises:
-            ValueError: If project doesn't exist or isn't initialized
+            ValueError: If project doesn't exist or profile is not configured
         """
-        self.project_id = project_id
-        self.user_id = user_id
+        # Get profile from CredentialsManager if not provided
+        if project_id is None or user_id is None:
+            creds_manager = CredentialsManager(working_dir=working_dir)
+            profile = creds_manager.get_profile()
+            self.project_id = project_id or profile['project_id']
+            self.user_id = user_id or profile['user_id']
+        else:
+            self.project_id = project_id
+            self.user_id = user_id
 
         # Initialize Supabase client
         self.supabase_client = init_supabase_client()

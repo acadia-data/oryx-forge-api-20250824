@@ -20,34 +20,47 @@ export SUPABASE_URL="https://your-project.supabase.co"
 export SUPABASE_ANON_KEY="your-anon-key-here"
 ```
 
-## User Configuration
+## Profile Configuration
 
-### Set User ID
+### Set Profile
 
-Configure your user ID for CLI operations:
-
-```bash
-oryxforge admin userid set "550e8400-e29b-41d4-a716-446655440000"
-```
-
-The user ID must exist in your Supabase `auth.users` table. This configuration is stored globally in `~/.oryxforge/cfg.ini`.
-
-### Get User ID
-
-View the currently configured user ID:
+Configure your user profile (user_id and project_id) for CLI operations:
 
 ```bash
-oryxforge admin userid get
+oryxforge admin profile set --userid "550e8400-e29b-41d4-a716-446655440000" --projectid "abc123-project-id"
 ```
 
-Output examples:
-```
-Current user ID: 550e8400-e29b-41d4-a716-446655440000
+Both the user ID and project ID must exist in your Supabase database.
+
+### Get Profile
+
+View the currently configured profile:
+
+```bash
+oryxforge admin profile get
 ```
 
-If no user ID is configured:
+Output example:
 ```
-No user ID configured. Run 'oryxforge admin userid set <userid>' to set one.
+Current profile:
+  User ID: 550e8400-e29b-41d4-a716-446655440000
+  Project ID: abc123-project-id
+```
+
+If no profile is configured:
+```
+No profile configured.
+No profile configured. Set profile with:
+  oryxforge admin profile set --userid <userid> --projectid <projectid>
+Or use CredentialsManager.set_profile(user_id, project_id)
+```
+
+### Clear Profile
+
+Clear the current profile configuration:
+
+```bash
+oryxforge admin profile clear
 ```
 
 ## Project Management
@@ -185,35 +198,41 @@ userid = 550e8400-e29b-41d4-a716-446655440000
 
 ### Project Configuration
 
-Location: `<project_directory>/.oryxforge`
-
-```ini
-[active]
-project_id = abc123...
-dataset_id = def456...
-sheet_id = ghi789...
-
-[project]
-name = My Data Project
-initialized = true
-```
+Stores profile (user_id and project_id) and active configuration (dataset_id and sheet_id) in the project directory.
 
 ## Workflow Examples
 
 ### Complete Setup Workflow
 
 ```bash
-# 1. Set user ID
-oryxforge admin userid set "your-user-id"
+# 1. Set up project directory
+mkdir my-project && cd my-project
 
-# 2. Create project
+# 2. Set profile (user_id and project_id)
+oryxforge admin profile set --userid "your-user-id" --projectid "your-project-id"
+
+# 3. Verify profile
+oryxforge admin profile get
+
+# 4. Check status
+oryxforge admin status
+```
+
+### Create New Project Workflow
+
+```bash
+# 1. First, create user profile in global config (one-time setup)
+oryxforge admin profile set --userid "your-user-id" --projectid "temp-project-id"
+
+# 2. Create a new project
 oryxforge admin projects create "Data Analysis Project"
+# Note the project ID returned
 
 # 3. Set up project directory
 mkdir my-project && cd my-project
 
-# 4. Pull and activate project (interactive)
-oryxforge admin pull
+# 4. Set profile with the new project ID
+oryxforge admin profile set --userid "your-user-id" --projectid "new-project-id"
 
 # 5. Verify setup
 oryxforge admin status
@@ -222,16 +241,14 @@ oryxforge admin status
 ### Switch Between Projects
 
 ```bash
-# List available projects
-oryxforge admin projects list
-
 # Switch to different project directory
 cd /path/to/other/project
 
-# Pull different project
-oryxforge admin pull --id other-project-id
+# Update profile with different project ID
+oryxforge admin profile set --userid "your-user-id" --projectid "other-project-id"
 
 # Verify switch
+oryxforge admin profile get
 oryxforge admin status
 ```
 
@@ -300,7 +317,7 @@ The admin CLI works alongside other OryxForge tools:
 2. **Use project directories**: Keep each project in its own directory for clear organization
 3. **Check status regularly**: Use `oryxforge admin status` to verify your current configuration
 4. **Use interactive modes**: Let the CLI guide you with interactive selection when unsure
-5. **Version control**: The `.oryxforge` config file can be committed to track project state
+5. **Version control**: The project config file can be committed to track project state
 
 ## Troubleshooting
 

@@ -3,13 +3,15 @@
 import os
 from pathlib import Path
 from typing import Any, Optional
+import pandas as pd
 from fastmcp import FastMCP
 from oryxforge.services.workflow_service import WorkflowService
 from oryxforge.services.project_service import ProjectService
-from oryxforge.services.utils import get_user_id, get_project_id
+from oryxforge.services.df_service import DFService
 
-# Initialize the workflow service with current working directory
+# Initialize services with current working directory
 svc = WorkflowService(base_dir=str(Path.cwd()))
+df_svc = DFService()
 
 # Create FastMCP instance
 mcp = FastMCP("OryxForge")
@@ -165,57 +167,55 @@ def workflow_run_flow(sheet: str, dataset: Optional[str] = None, flow_params: Op
 
 
 # Project management functions
-def project_create_dataset(user_id: str, project_id: str, name: str) -> str:
+def project_create_dataset(name: str) -> str:
     """Create a new dataset in the current project.
 
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
     Args:
-        user_id: User UUID who owns the dataset
-        project_id: Project UUID to create the dataset in
         name: The display name for the new dataset (will be converted to name_python internally)
 
     Returns:
         The ID of the newly created dataset
     """
-    project_service = ProjectService(project_id, user_id)
+    project_service = ProjectService()
     return project_service.ds_create(name)
 
 
-def project_create_sheet(user_id: str, project_id: str, dataset_id: str, name: str) -> str:
+def project_create_sheet(dataset_id: str, name: str) -> str:
     """Create a new datasheet in the specified dataset.
 
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
     Args:
-        user_id: User UUID who owns the datasheet
-        project_id: Project UUID
         dataset_id: The ID of the dataset to create the sheet in
         name: The display name for the new datasheet (will be converted to name_python internally)
 
     Returns:
         The ID of the newly created datasheet
     """
-    project_service = ProjectService(project_id, user_id)
+    project_service = ProjectService()
     return project_service.sheet_create(dataset_id, name)
 
 
-def project_list_datasets(user_id: str, project_id: str) -> list[dict]:
+def project_list_datasets() -> list[dict]:
     """List all datasets in the current project.
 
-    Args:
-        user_id: User UUID
-        project_id: Project UUID
+    Uses profile from .oryxforge configuration to get user_id and project_id.
 
     Returns:
         List of dicts, each containing id, name, and name_python fields for a dataset
     """
-    project_service = ProjectService(project_id, user_id)
+    project_service = ProjectService()
     return project_service.ds_list()
 
 
-def project_get_dataset(user_id: str, project_id: str, id: Optional[str] = None, name: Optional[str] = None, name_python: Optional[str] = None) -> dict:
+def project_get_dataset(id: Optional[str] = None, name: Optional[str] = None, name_python: Optional[str] = None) -> dict:
     """Get a single dataset by id, name, or name_python.
 
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
     Args:
-        user_id: User UUID
-        project_id: Project UUID
         id: Dataset ID (highest priority)
         name: Dataset name (medium priority)
         name_python: Dataset Python-safe name (lowest priority)
@@ -226,16 +226,16 @@ def project_get_dataset(user_id: str, project_id: str, id: Optional[str] = None,
     Note:
         Parameter priority: id > name > name_python
     """
-    project_service = ProjectService(project_id, user_id)
+    project_service = ProjectService()
     return project_service.ds_get(id=id, name=name, name_python=name_python)
 
 
-def project_list_sheets(user_id: str, project_id: str, dataset_id: Optional[str] = None, dataset_name: Optional[str] = None, dataset_name_python: Optional[str] = None) -> list[dict]:
+def project_list_sheets(dataset_id: Optional[str] = None, dataset_name: Optional[str] = None, dataset_name_python: Optional[str] = None) -> list[dict]:
     """List all datasheets in the current project or specific dataset.
 
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
     Args:
-        user_id: User UUID
-        project_id: Project UUID
         dataset_id: Dataset ID (if None, list all datasheets in project)
         dataset_name: Dataset name to filter by (lower priority than dataset_id)
         dataset_name_python: Dataset name_python to filter by (lowest priority)
@@ -246,16 +246,16 @@ def project_list_sheets(user_id: str, project_id: str, dataset_id: Optional[str]
     Note:
         Parameter priority: dataset_id > dataset_name > dataset_name_python
     """
-    project_service = ProjectService(project_id, user_id)
+    project_service = ProjectService()
     return project_service.sheet_list(dataset_id, dataset_name, dataset_name_python)
 
 
-def project_get_sheet(user_id: str, project_id: str, dataset_id: Optional[str] = None, id: Optional[str] = None, name: Optional[str] = None, name_python: Optional[str] = None) -> dict:
+def project_get_sheet(dataset_id: Optional[str] = None, id: Optional[str] = None, name: Optional[str] = None, name_python: Optional[str] = None) -> dict:
     """Get a single datasheet by id, name, or name_python.
 
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
     Args:
-        user_id: User UUID
-        project_id: Project UUID
         dataset_id: Dataset ID to filter by (optional, searches all project datasets if None)
         id: Datasheet ID (highest priority)
         name: Datasheet name (medium priority)
@@ -267,8 +267,53 @@ def project_get_sheet(user_id: str, project_id: str, dataset_id: Optional[str] =
     Note:
         Parameter priority: id > name > name_python
     """
-    project_service = ProjectService(project_id, user_id)
+    project_service = ProjectService()
     return project_service.sheet_get(dataset_id=dataset_id, id=id, name=name, name_python=name_python)
+
+
+# DataFrame analysis functions
+def df_describe(file_path: str, head_rows: int = 5, tail_rows: int = 5) -> str:
+    """Generate a comprehensive analysis report for a pandas DataFrame from a file.
+
+    Args:
+        file_path: Path to the file containing the DataFrame (CSV, parquet, pickle, etc.)
+        head_rows: Number of rows to show in head preview (default: 5)
+        tail_rows: Number of rows to show in tail preview (default: 5)
+
+    Returns:
+        A markdown-formatted string containing the DataFrame analysis report including:
+        - Shape and memory usage
+        - Column information (names, types, null counts)
+        - Head and tail previews
+        - Statistical summary
+        - Missing values analysis with percentages
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If the file format is not supported
+    """
+    # Detect file format and load DataFrame
+    file_path_obj = Path(file_path)
+
+    if not file_path_obj.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    suffix = file_path_obj.suffix.lower()
+
+    if suffix == '.csv':
+        df = pd.read_csv(file_path)
+    elif suffix == '.parquet':
+        df = pd.read_parquet(file_path)
+    elif suffix in ['.pkl', '.pickle']:
+        df = pd.read_pickle(file_path)
+    elif suffix in ['.xlsx', '.xls']:
+        df = pd.read_excel(file_path)
+    elif suffix == '.json':
+        df = pd.read_json(file_path)
+    else:
+        raise ValueError(f"Unsupported file format: {suffix}")
+
+    return df_svc.describe_pd(df, head_rows=head_rows, tail_rows=tail_rows)
 
 
 # Register all tools with MCP
@@ -284,3 +329,4 @@ mcp.tool(project_list_datasets)
 mcp.tool(project_get_dataset)
 mcp.tool(project_list_sheets)
 mcp.tool(project_get_sheet)
+mcp.tool(df_describe)

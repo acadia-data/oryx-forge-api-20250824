@@ -290,9 +290,10 @@ class TestCLIService:
             # Activate the project
             cli_service.project_activate(project_id)
 
-            # Verify config was written
+            # Verify profile was written
             config = ConfigObj(str(cli_service.project_config_file))
-            assert config['active']['project_id'] == project_id
+            assert config['profile']['project_id'] == project_id
+            assert config['profile']['user_id'] == cli_service.user_id
         finally:
             # Clean up
             try:

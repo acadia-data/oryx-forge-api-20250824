@@ -14,23 +14,17 @@ pip install oryxforge
 
 Before using the admin CLI, you need to configure your environment:
 
-```bash
-# Set Supabase credentials
-export SUPABASE_URL="https://your-project.supabase.co"
-export SUPABASE_ANON_KEY="your-anon-key-here"
-```
-
 ## Profile Configuration
 
 ### Set Profile
 
-Configure your user profile (user_id and project_id) for CLI operations:
+Configure your user profile (user_id and project_id) for CLI operations. This needs to happen in the directory that you want to work in, as it is project specific.
 
 ```bash
 oryxforge admin profile set --userid "550e8400-e29b-41d4-a716-446655440000" --projectid "abc123-project-id"
 ```
 
-Both the user ID and project ID must exist in your Supabase database.
+Both the user ID and project ID must exist in your Supabase database. You can get this from the oryx forge UI.
 
 ### Get Profile
 
@@ -151,6 +145,50 @@ oryxforge admin sheet activate
 
 Interactive mode shows datasheets from the currently active dataset, or all datasheets in the project if no dataset is active.
 
+## File Import
+
+### Import File to Sources Dataset
+
+Import a data file into your project:
+
+```bash
+oryxforge admin projects import data.csv
+```
+
+The import command:
+- Automatically processes and cleans the file using AI
+- Creates a new datasheet in the "Sources" dataset
+- Supports CSV, Excel (.xlsx, .xls), and Parquet files
+
+**Prerequisites:**
+- Profile must be configured with `--userid` and `--projectid`
+
+**Example workflow:**
+```bash
+# 1. Set profile (one-time setup)
+oryxforge admin profile set --userid "your-user-id" --projectid "your-project-id"
+
+# 2. Import a CSV file
+oryxforge admin projects import sales_data.csv
+
+# 3. Import an Excel file
+oryxforge admin projects import customer_data.xlsx
+
+# 4. Import a Parquet file
+oryxforge admin projects import events.parquet
+```
+
+**Supported File Types:**
+- **CSV** (`.csv`): Comma-separated values
+- **Excel** (`.xlsx`, `.xls`): Microsoft Excel files (imports first sheet only)
+- **Parquet** (`.parquet`): Apache Parquet columnar format
+
+The import automatically handles:
+- Data type detection
+- Column name cleaning
+- Missing value handling
+- For Excel files: Removes empty rows/columns, detects headers and footers
+
 ## Status and Configuration
 
 ### Show Status
@@ -170,35 +208,6 @@ Active Datasheet: ghi789...
 Working Directory: /home/user/my-project
 ```
 
-### Show Configuration Files
-
-View configuration file contents:
-
-```bash
-# Show both global and project config
-oryxforge admin config
-
-# Show only global config
-oryxforge admin config --global
-
-# Show only project config
-oryxforge admin config --project
-```
-
-## Configuration Files
-
-### Global Configuration
-
-Location: `~/.oryxforge/cfg.ini`
-
-```ini
-[user]
-userid = 550e8400-e29b-41d4-a716-446655440000
-```
-
-### Project Configuration
-
-Stores profile (user_id and project_id) and active configuration (dataset_id and sheet_id) in the project directory.
 
 ## Workflow Examples
 
@@ -244,9 +253,6 @@ oryxforge admin status
 # Switch to different project directory
 cd /path/to/other/project
 
-# Update profile with different project ID
-oryxforge admin profile set --userid "your-user-id" --projectid "other-project-id"
-
 # Verify switch
 oryxforge admin profile get
 oryxforge admin status
@@ -268,56 +274,23 @@ oryxforge admin sheet activate --name results
 oryxforge admin status
 ```
 
-## Error Handling
-
-The CLI provides clear error messages for common issues:
+### Import and Analyze Data
 
 ```bash
-# No user ID configured
-$ oryxforge admin projects list
-❌ Error: No user ID configured. Run 'oryxforge admin userid set <userid>' first.
+# 1. Set up profile (one-time setup)
+oryxforge admin profile set --userid "your-user-id" --projectid "your-project-id"
 
-# Project not found
-$ oryxforge admin pull --id invalid
-❌ Error: Project 'invalid' not found or access denied.
+# 2. Import a data file
+oryxforge admin projects import customer_data.csv
 
-# Dataset not found
-$ oryxforge admin dataset activate --name nonexistent
-❌ Error: Dataset 'nonexistent' not found in current project.
-Available datasets: scratchpad, view
+# 3. Check import status
+oryxforge admin status
+
+# 4. The file is now available as a datasheet in the "Sources" dataset
+# You can activate it and work with it
+oryxforge admin dataset activate --name Sources
+oryxforge admin sheet activate --name customer_data.csv
 ```
-
-## Interactive Mode
-
-When IDs or names are not provided, commands enter interactive mode:
-
-```bash
-$ oryxforge admin dataset activate
-
-Available datasets:
-==================================================
- 1. scratchpad (ID: def456...)
- 2. view (ID: ghi789...)
-
-Select dataset (1-2): 1
-✅ Activated dataset: def456...
-```
-
-## Integration with Other Tools
-
-The admin CLI works alongside other OryxForge tools:
-
-- **MCP Server**: Use `oryxforge mcp serve` for task management
-- **API**: Project configuration is compatible with the REST API
-- **Web Interface**: Projects created via CLI appear in the web interface
-
-## Best Practices
-
-1. **Set up environment variables**: Always configure Supabase credentials before using CLI commands
-2. **Use project directories**: Keep each project in its own directory for clear organization
-3. **Check status regularly**: Use `oryxforge admin status` to verify your current configuration
-4. **Use interactive modes**: Let the CLI guide you with interactive selection when unsure
-5. **Version control**: The project config file can be committed to track project state
 
 ## Troubleshooting
 
@@ -328,13 +301,8 @@ pip install oryxforge
 pip install --upgrade oryxforge
 ```
 
-### Authentication errors
-- Verify `SUPABASE_URL` and `SUPABASE_ANON_KEY` environment variables
-- Ensure your user ID exists in the Supabase auth.users table
-
 ### Permission errors
 - Check that your user ID has access to the projects/datasets you're trying to access
-- Verify Supabase Row Level Security (RLS) policies
 
 ### Git errors during project init
 - Ensure git is installed and available in PATH

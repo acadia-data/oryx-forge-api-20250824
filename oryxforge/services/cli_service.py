@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from configobj import ConfigObj
 from supabase import Client
 from loguru import logger
@@ -411,3 +411,66 @@ class CLIService:
 
         except Exception as e:
             raise ValueError(f"Failed to pull and activate project: {str(e)}")
+
+    def import_file(self, path: str) -> Dict[str, Any]:
+        """
+        Import a file into the active project's "Sources" dataset.
+
+        Creates a data_sources entry with local:// URI and uses ImportService to process.
+
+        Args:
+            path: Path to the file to import
+
+        Returns:
+            Dict containing:
+                - message: Success message
+                - file_id: ID of the data_sources entry
+                - file_name: Name of the imported file
+                - dataset_id: ID of the Sources dataset
+                - sheet_id: ID of the created datasheet
+                - sheet_name: Python name of the created datasheet (name_python)
+                - dataset_name: Name of the dataset ("Sources")
+
+        Raises:
+            ValueError: If import fails or no active project configured
+        """
+        from .import_service import ImportService
+        from .iam import CredentialsManager
+
+        # Get profile
+        creds_manager = CredentialsManager(working_dir=str(self.cwd))
+        profile = creds_manager.get_profile()
+        user_id = profile['user_id']
+        project_id = profile['project_id']
+
+        # Extract file name from path
+        file_path = Path(path)
+        file_name = file_path.name
+
+        # Create data_sources entry with local:// URI
+        file_uri = f"local://{file_path.resolve()}"
+
+        # Use upsert to handle retries - if same filename already exists for this project, reuse it
+        response = self.supabase_client.table("data_sources").upsert({
+            "uri": file_uri,
+            "name": file_name,
+            "type": "auto",
+            "user_owner": user_id,
+            "project_id": project_id,
+            "status": {
+                "flag": "pending",
+                "msg": "File registered, awaiting processing"
+            }
+        },
+        on_conflict="name,project_id,user_owner").execute()
+
+        file_id = response.data[0]['id']
+        logger.info(f"Data source ready with file_id: {file_id}")
+
+        # Import using ImportService
+        import_service = ImportService(file_id)
+        result = import_service.import_file()
+
+        logger.success(f"File imported: {result['message']}")
+
+        return result

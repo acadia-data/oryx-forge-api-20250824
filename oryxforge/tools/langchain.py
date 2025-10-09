@@ -150,7 +150,8 @@ def project_create_sheet(dataset_id: str, name: str) -> str:
         The ID of the newly created datasheet
     """
     project_service = ProjectService()
-    return project_service.sheet_create(dataset_id, name)
+    sheet_data = project_service.sheet_create(dataset_id, name)
+    return sheet_data['id']
 
 
 @tool

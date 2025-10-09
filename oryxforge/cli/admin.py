@@ -402,31 +402,59 @@ def show_status():
 
 
 @admin.command('config')
-@click.option('--global', 'show_global', is_flag=True, help='Show global configuration')
 @click.option('--project', 'show_project', is_flag=True, help='Show project configuration')
 @handle_errors
-def show_config(show_global: bool, show_project: bool):
+def show_config(show_project: bool):
     """Show configuration files content."""
     cli_service = CLIService()
 
-    if show_global or (not show_global and not show_project):
-        click.echo("Global Configuration:")
-        click.echo("=" * 30)
-        if cli_service.config_file.exists():
-            click.echo(f"File: {cli_service.config_file}")
-            click.echo(cli_service.config_file.read_text())
-        else:
-            click.echo("No global configuration file found")
-        click.echo()
+    click.echo("Project Configuration:")
+    click.echo("=" * 30)
+    if cli_service.project_config_file.exists():
+        click.echo(f"File: {cli_service.project_config_file}")
+        click.echo(cli_service.project_config_file.read_text())
+    else:
+        click.echo("No project configuration file found")
 
-    if show_project or (not show_global and not show_project):
-        click.echo("Project Configuration:")
-        click.echo("=" * 30)
-        if cli_service.project_config_file.exists():
-            click.echo(f"File: {cli_service.project_config_file}")
-            click.echo(cli_service.project_config_file.read_text())
-        else:
-            click.echo("No project configuration file found")
+
+@projects.command('import')
+@click.argument('filepath', type=click.Path(exists=True))
+@handle_errors
+def import_file(filepath: str):
+    """
+    Import a file into the active project's "Sources" dataset.
+
+    FILEPATH: Path to the file to import (CSV, Excel, or Parquet)
+
+    The command imports to the "Sources" dataset in the active project configured via:
+        oryxforge admin profile set --userid <userid> --projectid <projectid>
+
+    Examples:
+        # First set profile (one-time setup)
+        oryxforge admin profile set --userid "aaa" --projectid "bbb"
+
+        # Import file to Sources dataset
+        oryxforge admin projects import data.csv
+    """
+    cli_service = CLIService()
+
+    # Import the file and get detailed result
+    result = cli_service.import_file(path=filepath)
+
+    click.echo(f"✅ {result['message']}")
+
+    # Ask if user wants to activate the imported sheet
+    if click.confirm(f'\nDo you want to activate the imported sheet "{result["file_name"]}"?', default=True):
+        try:
+            # Activate the Sources dataset
+            cli_service.dataset_activate(result['dataset_id'])
+
+            # Activate the sheet
+            cli_service.sheet_activate(result['sheet_id'])
+
+            click.echo(f"✅ Activated dataset '{result['dataset_name']}' and sheet '{result['file_name']}'")
+        except Exception as e:
+            click.echo(f"⚠️  Warning: Could not activate sheet: {str(e)}", err=True)
 
 
 if __name__ == '__main__':

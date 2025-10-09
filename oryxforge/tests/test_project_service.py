@@ -171,13 +171,16 @@ class TestProjectService:
 
         try:
             # Create a sheet in the dataset
-            sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
-            assert isinstance(sheet_id, str)
-            assert len(sheet_id) > 0
+            sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+            assert isinstance(sheet_data, dict)
+            assert 'id' in sheet_data
+            assert 'name' in sheet_data
+            assert 'name_python' in sheet_data
+            assert sheet_data['name'] == test_sheet_name
 
             # Verify it exists
             sheets = project_service.sheet_list(dataset_id)
-            created_sheet = next((sh for sh in sheets if sh['id'] == sheet_id), None)
+            created_sheet = next((sh for sh in sheets if sh['id'] == sheet_data['id']), None)
             assert created_sheet is not None
             assert created_sheet['name'] == test_sheet_name
 
@@ -195,15 +198,15 @@ class TestProjectService:
             project_service.sheet_create('non-existent-dataset-id', test_sheet_name)
 
     def test_sheet_create_duplicate_name(self, project_service, test_dataset_name, test_sheet_name):
-        """Test datasheet creation with duplicate name."""
+        """Test datasheet creation with duplicate name (idempotent with upsert)."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data_1 = project_service.sheet_create(dataset_id, test_sheet_name)
 
         try:
-            # Try to create another sheet with same name
-            with pytest.raises(ValueError, match="already exists"):
-                project_service.sheet_create(dataset_id, test_sheet_name)
+            # Try to create another sheet with same name - should return same ID (idempotent)
+            sheet_data_2 = project_service.sheet_create(dataset_id, test_sheet_name)
+            assert sheet_data_1['id'] == sheet_data_2['id'], "Upsert should return same ID for duplicate"
         finally:
             # Clean up
             try:
@@ -224,7 +227,8 @@ class TestProjectService:
             assert len(result) == 0  # No sheets created yet
 
             # Create a sheet and verify it appears in the list
-            sheet_id = project_service.sheet_create(dataset_id, f"sheet_in_{test_dataset_name}")
+            sheet_data = project_service.sheet_create(dataset_id, f"sheet_in_{test_dataset_name}")
+            sheet_id = sheet_data['id']
             result = project_service.sheet_list(dataset_id)
             assert len(result) == 1
             assert result[0]['id'] == sheet_id
@@ -304,7 +308,8 @@ class TestProjectService:
         """Test sheet_exists returns True for existing sheet."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_id = sheet_data['id']
 
         try:
             # Check that it exists
@@ -375,7 +380,8 @@ class TestProjectService:
         """Test successful first sheet retrieval."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_id = sheet_data['id']
 
         try:
             result = project_service.get_first_sheet_id(dataset_id)
@@ -445,7 +451,8 @@ class TestProjectService:
         """Test successful interactive sheet selection."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_id = sheet_data['id']
 
         try:
             with patch('builtins.input', return_value='1'):
@@ -519,7 +526,8 @@ class TestProjectService:
         """Test successful sheet retrieval by name with dataset ID."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_id = sheet_data['id']
 
         try:
             result = project_service.sheet_get(dataset_id=dataset_id, name=test_sheet_name)
@@ -539,7 +547,8 @@ class TestProjectService:
         """Test sheet retrieval by name across all datasets."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_id = sheet_data['id']
 
         try:
             # Search across all datasets (don't specify dataset_id)
@@ -558,7 +567,8 @@ class TestProjectService:
         """Test successful sheet retrieval by ID."""
         # Create dataset and sheet
         dataset_id = project_service.ds_create(test_dataset_name)
-        sheet_id = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
+        sheet_id = sheet_data['id']
 
         try:
             result = project_service.sheet_get(id=sheet_id)

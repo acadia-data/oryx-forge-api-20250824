@@ -194,21 +194,27 @@ class ProjectService:
                 raise ValueError(f"Dataset '{name}' already exists in this project")
             raise ValueError(f"Failed to create dataset: {str(e)}")
 
-    def sheet_create(self, dataset_id: str, name: str) -> str:
+    def sheet_create(self, dataset_id: str, name: str) -> Dict[str, str]:
         """Create a new datasheet in the specified dataset.
 
         The name will be automatically converted to a Python-safe name_python (PascalCase).
 
+        Uses upsert to handle idempotent operations - if a sheet with the same
+        (user_owner, dataset_id, name) already exists, returns the existing sheet data.
+
         Args:
             dataset_id: Dataset UUID
             name: Datasheet display name (e.g., 'HPI Master CSV')
-                  Must be unique for user/dataset
 
         Returns:
-            str: Created datasheet UUID
+            Dict[str, str]: Dict with keys:
+                - id: Datasheet UUID
+                - name: Datasheet display name
+                - name_python: Python-safe name (PascalCase)
+                - dataset_id: Parent dataset UUID
 
         Raises:
-            ValueError: If dataset doesn't exist or datasheet name already exists
+            ValueError: If dataset doesn't exist
         """
         # Validate dataset exists and belongs to user
         if not self.ds_exists(dataset_id):
@@ -217,24 +223,30 @@ class ProjectService:
         try:
             response = (
                 self.supabase_client.table("datasheets")
-                .insert({
+                .upsert({
                     "name": name,
                     "user_owner": self.user_id,
                     "dataset_id": dataset_id
-                })
+                },
+                on_conflict="user_owner,dataset_id,name")
                 .execute()
             )
 
             if not response.data:
                 raise ValueError("Failed to create datasheet")
 
-            sheet_id = response.data[0]['id']
-            logger.success(f"Created datasheet '{name}' with ID: {sheet_id}")
-            return sheet_id
+            sheet_data = response.data[0]
+            logger.success(f"Datasheet '{name}' ready with ID: {sheet_data['id']}")
+
+            # Return relevant fields
+            return {
+                'id': sheet_data['id'],
+                'name': sheet_data['name'],
+                'name_python': sheet_data['name_python'],
+                'dataset_id': sheet_data['dataset_id']
+            }
 
         except Exception as e:
-            if "unique_user_dataset_datasheet_name" in str(e):
-                raise ValueError(f"Datasheet '{name}' already exists in this dataset")
             raise ValueError(f"Failed to create datasheet: {str(e)}")
 
     def sheet_list(self, dataset_id: str = None, dataset_name: str = None, dataset_name_python: str = None) -> List[Dict[str, str]]:

@@ -43,7 +43,11 @@ dependencies = [
     "python-gitlab",
     "claude-agent-sdk",
     "jinja2>=3.0.0",
-    "tomli>=2.0.0; python_version < '3.11'"
+    "tomli>=2.0.0; python_version < '3.11'",
+    "langchain-openai>=0.1.0",
+    "langchain-core>=0.1.0",
+    "pydantic>=2.0.0",
+    "adtiam"
 ]
 
 [project.urls]

@@ -11,6 +11,7 @@ local.py
 ui/
 tasks/
 temp/
+.oryxforge.cfg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

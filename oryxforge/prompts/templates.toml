@@ -65,8 +65,16 @@ You should:
 
 [Chat]
 prompt = '''
+
 # user instructions
-{{ file_path }}
+{{ message_user }}
+
+{% if chat_history %}
+# recent conversation context
+{% for msg in chat_history %}
+{{ msg.role }}: {{ msg.content_summary }}
+{% endfor %}
+{% endif %}
 
 # role
 you are a data analyst.
@@ -74,6 +82,21 @@ you are a data analyst.
 # task
 
 respond to the # user instructions
+
+# data context
+
+## input data sources (read-only)
+{% if inputs %}
+{% for inp in inputs %}
+- {{ inp.dataset }}.{{ inp.sheet }}
+{% endfor %}
+{% else %}
+No input data sources specified
+{% endif %}
+
+## output target
+Dataset: {{ target_dataset }}
+Sheet: {{ target_sheet }}
 
 # tool use
 
@@ -89,7 +112,7 @@ You should:
 YOU MUST FOLLOW THIS WORKFLOW! Use a todo list to keep track of the steps and make sure you follow ALL of them.
 
 1) look at the current data. save your code by calling tool code_upsert_eda with
-parameters: dataset="{{ dataset_new }}" sheet="{make up a meaningful name given the user query}" input=[{'dataset':{{ dataset_active }} 'sheet':{{ sheet_active }}}]. When you pass the input parameter, you will get the input data loaded in a variable "data" which is a dictionary with keys being the {dataset}.{sheet} and values the pandas dataframe. for example the active sheet has key 'sources.HpiMasterCsv' and values being the loaded pandas dataframes, so you can do `df = data['sources.HpiMasterCsv']`. if there are multiple inputs you can retrieve multiple dataframes from the same `data` dictionary.
+parameters: dataset="{{ target_dataset }}" sheet="{{ target_sheet }}" input=[{% for inp in inputs %}{'dataset':'{{ inp.dataset }}', 'sheet':'{{ inp.sheet }}'}{% if not loop.last %}, {% endif %}{% endfor %}]. When you pass the input parameter, you will get the input data loaded in a variable "data" which is a dictionary with keys being the {dataset}.{sheet} and values the pandas dataframe. for example if you have input 'sources.HpiMasterCsv', you can do `df = data['sources.HpiMasterCsv']`. if there are multiple inputs you can retrieve multiple dataframes from the same `data` dictionary.
 2) code_upsert_eda which will return file_python_eda containing your code and you can execute that file_python_eda using bash
 3) review output and iterate on your code by repeating step 1) and 2) until you can answer the user question
 4) clean up the code to make it production ready and save it use the mcp tool oryxforge 'code_upsert_run'. the final output pandas dataframe needs to be assigned to df_out.
@@ -100,6 +123,104 @@ Respond with an actionable summary of what you did (not mentioning the code chan
 '''
 
 [intent]
+
+prompt_classification = '''
+# Context
+
+## Current User Message
+{{ message_user }}
+
+## Mode
+Current mode: {{ mode }}
+
+## Active Context
+{% if ds_active_name and sheet_active_name %}
+Active Dataset: {{ ds_active_name }} (Python: {{ ds_active_name_python }})
+Active Sheet: {{ sheet_active_name }} (Python: {{ sheet_active_name_python }})
+{% else %}
+No active dataset/sheet set
+{% endif %}
+
+## Available Datasets (use name_python in your response)
+{% for ds in available_datasets %}
+- name_python: "{{ ds.name_python }}" | display_name: "{{ ds.name }}" | id: {{ ds.id }}
+{% endfor %}
+
+## Available Sheets (use name_python in your response)
+{% for sheet in available_sheets %}
+- dataset_name_python: "{{ sheet.dataset_name_python }}" | sheet_name_python: "{{ sheet.name_python }}" | display_name: "{{ sheet.name }}" | id: {{ sheet.id }}
+{% endfor %}
+
+## Recent Conversation Summary
+{% if chat_history_summary %}
+{% for msg in chat_history_summary %}
+{{ msg.role }}: {{ msg.content_summary }}
+{% endfor %}
+{% else %}
+No previous conversation history
+{% endif %}
+
+# Task
+
+Analyze the user's request and determine:
+1. Action: Is this a NEW analysis or EDIT of existing work?
+2. Inputs: Which datasets/sheets are being READ as inputs?
+3. Targets: Which dataset/sheet is the OUTPUT destination?
+
+# Output Format (JSON)
+
+Return a JSON object with:
+```json
+{
+  "action": "new" | "edit",
+  "inputs": [{"dataset": "name_python", "sheet": "name_python"}],
+  "targets": [{"dataset": "name_python", "sheet": "name_python", "is_new": true|false}],
+  "confidence": "high" | "medium" | "low"
+}
+```
+
+# Important Rules
+
+1. **Inputs vs Targets**: A dataset/sheet should ONLY appear in inputs OR targets, not both
+2. **Inputs**: Existing data sources that will be READ (reference data)
+3. **Targets**: Where output will be WRITTEN (only ONE target allowed)
+4. **is_new**:
+   - true if creating a NEW sheet (generate a descriptive name based on user intent)
+   - false if editing EXISTING sheet
+5. **name_python**: Use the Python-safe names from the available datasets/sheets above
+6. **Default behavior**: If no specific dataset mentioned, use active dataset/sheet as appropriate
+7. **CRITICAL - Use EXACT name_python values (NOT display names)**:
+   - You MUST use the EXACT name_python values from the "Available Datasets" and "Available Sheets" lists above
+   - ALWAYS use the value shown after "Python:" in the lists - this is the name_python
+   - DO NOT use the display name (shown after "Name:") - use ONLY the Python name
+   - DO NOT transform, modify, invent, or guess name_python values
+   - Copy the name_python character-for-character exactly as shown after "Python:" in the lists
+   - Example: If you see "Name: Sources, Python: sources" → use "sources" (NOT "Sources")
+   - Example: If you see "Name: HPI Master CSV, Python: HpiMasterCsv" → use "HpiMasterCsv" (NOT "HPI Master CSV")
+   - Example: If you see "Name: Exploration, Python: exploration" → use "exploration" (NOT "Exploration")
+   - When user mentions a sheet by its display name, find the matching entry in the list and extract the exact name_python value (the part after "Python:")
+
+# Classification Guidelines
+
+**NEW** when:
+- User says "show me", "create", "make", "analyze", "what is", "how many"
+- Creating different output type (chart → table, bar chart → line chart)
+- Starting new analysis task
+
+**EDIT** when:
+- User says "also", "add", "change", "update", "modify"
+- Same output type, just adjusting properties
+- Reference to "the chart", "this table", "current analysis"
+
+# Dataset Selection Guidelines
+
+When selecting the target dataset for NEW analysis:
+- Use "exploration" dataset for exploratory analysis, data viewing, and ad-hoc queries
+- Use "sources" dataset only when importing raw data files
+- Avoid using import-related datasets (names containing "import", "new_import") for regular analysis
+- If user doesn't specify a target dataset, default to "exploration" for analysis tasks
+
+'''
 
 prompt_intent_classification = '''
 

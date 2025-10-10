@@ -28,6 +28,15 @@ except ImportError:
     pass
 
 
+# Add dev command group
+try:
+    from .dev import dev
+    cli.add_command(dev)
+except ImportError:
+    # Dev dependencies not installed, skip dev commands
+    pass
+
+
 # Add other command groups here as they're developed
 # Example:
 # try:

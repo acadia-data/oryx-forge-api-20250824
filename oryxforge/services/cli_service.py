@@ -540,3 +540,61 @@ class CLIService:
         logger.success(f"File imported: {result['message']}")
 
         return result
+
+    def chat(self, message: str) -> Dict[str, Any]:
+        """
+        Process a chat message for interactive data analysis.
+
+        Args:
+            message: User's chat message
+
+        Returns:
+            Dict containing:
+                - message: Agent response text
+                - target_dataset: Target dataset name_python
+                - target_sheet: Target sheet name_python
+                - cost_usd: Cost of operation
+                - duration_ms: Duration of operation
+
+        Raises:
+            ValueError: If no profile configured or chat processing fails
+        """
+        from .chat_service import ChatService
+        from .iam import CredentialsManager
+
+        # Get profile
+        creds_manager = CredentialsManager(working_dir=str(self.cwd))
+        try:
+            profile = creds_manager.get_profile()
+            user_id = profile['user_id']
+            project_id = profile['project_id']
+        except ValueError as e:
+            raise ValueError(
+                f"No profile configured. Run 'oryxforge admin profile set --userid <userid> --projectid <projectid>' first. {str(e)}"
+            )
+
+        # Get mode (default to 'explore' if not set)
+        mode = self.mode_get()
+        if not mode:
+            mode = 'explore'
+            logger.info("No mode set, defaulting to 'explore'")
+
+        # Get active dataset and sheet from configuration
+        active_config = self.get_active()
+        ds_active = active_config.get('dataset_id')
+        sheet_active = active_config.get('sheet_id')
+
+        # Initialize ChatService
+        chat_service = ChatService(user_id=user_id, project_id=project_id)
+
+        # Process chat
+        logger.info(f"Processing chat message in mode: {mode}")
+        result = chat_service.chat(
+            message_user=message,
+            mode=mode,
+            ds_active=ds_active,
+            sheet_active=sheet_active
+        )
+
+        logger.success("Chat message processed successfully")
+        return result

@@ -108,6 +108,32 @@ class ImportService:
 
             logger.info(f"Downloaded file to {fpath}")
 
+    def save_insight(self, datasheet_id: str, prompt: str, result) -> Dict[str, Any]:
+        """
+        Save agent insight to insights table.
+
+        Args:
+            datasheet_id: ID of the datasheet
+            prompt: The prompt sent to the agent
+            result: ResultMessage from ClaudeAgent
+
+        Returns:
+            Dict containing the saved insight data
+        """
+        insight_data = {
+            "user_owner": self.file['user_owner'],
+            "project_id": self.file['project_id'],
+            "datasheet_id": datasheet_id,
+            "result": result.result,
+            "prompt": prompt,
+            "cost_usd": result.total_cost_usd,
+            "duration_ms": result.duration_ms
+        }
+
+        response = self.supabase_client.table("insights").insert(insight_data).execute()
+        logger.info(f"Saved insight: {response.data[0]['id']}")
+        return response.data[0]
+
     def _render_prompt(self, file_path: str, dataset: str, sheet: str) -> str:
         """
         Render the import prompt from template using Jinja2.
@@ -170,10 +196,11 @@ class ImportService:
             sources_dataset = self.project_service.ds_get(name="Sources")
             dataset_id = sources_dataset['id']
 
-            # Create datasheet first (using file name)
+            # Create datasheet first (using file name and linking to source)
             sheet_data = self.project_service.sheet_create(
                 dataset_id=dataset_id,
-                name=self.file['name']
+                name=self.file['name'],
+                source_id=self.file_id
             )
 
             logger.success(f"Datasheet ready: {sheet_data['id']}")
@@ -198,6 +225,9 @@ class ImportService:
                 verbose=True
             )
 
+            # Save insight
+            self.save_insight(sheet_data['id'], prompt, result)
+
             # Set status to ready
             self.supabase_client.table("data_sources").update({
                 "status": {
@@ -213,7 +243,8 @@ class ImportService:
                 "dataset_id": dataset_id,
                 "sheet_id": sheet_data['id'],
                 "sheet_name": sheet_data['name_python'],
-                "dataset_name": sources_dataset['name_python']
+                "dataset_name": sources_dataset['name_python'],
+                "agent_result": result
             }
 
         except Exception as e:

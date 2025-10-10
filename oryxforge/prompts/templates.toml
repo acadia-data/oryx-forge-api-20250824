@@ -62,3 +62,558 @@ You should:
   - Treat your userid/projectid note as "have these available IF a tool needs them"
 
 '''
+
+[Chat]
+prompt = '''
+# user instructions
+{{ file_path }}
+
+# role
+you are a data analyst.
+
+# task
+
+respond to the # user instructions
+
+# tool use
+
+Use ONLY mcp tools oryxforge as described in the workflow.
+
+You should:
+  - Check what tools are available, their names and descriptions
+  - Always check the tool's parameter schema in my function definitions before invoking
+  - Only use parameters that are actually defined for that specific tool
+  - Treat your userid/projectid note as "have these available IF a tool needs them"
+
+# your workflow
+YOU MUST FOLLOW THIS WORKFLOW! Use a todo list to keep track of the steps and make sure you follow ALL of them.
+
+1) look at the current data. save your code by calling tool code_upsert_eda with
+parameters: dataset="{{ dataset_new }}" sheet="{make up a meaningful name given the user query}" input=[{'dataset':{{ dataset_active }} 'sheet':{{ sheet_active }}}]. When you pass the input parameter, you will get the input data loaded in a variable "data" which is a dictionary with keys being the {dataset}.{sheet} and values the pandas dataframe. for example the active sheet has key 'sources.HpiMasterCsv' and values being the loaded pandas dataframes, so you can do `df = data['sources.HpiMasterCsv']`. if there are multiple inputs you can retrieve multiple dataframes from the same `data` dictionary.
+2) code_upsert_eda which will return file_python_eda containing your code and you can execute that file_python_eda using bash
+3) review output and iterate on your code by repeating step 1) and 2) until you can answer the user question
+4) clean up the code to make it production ready and save it use the mcp tool oryxforge 'code_upsert_run'. the final output pandas dataframe needs to be assigned to df_out.
+5) tool 'code_upsert_run' will return file_python_flow containing your production pipeline workflow code, execute the production data pipeline workflow code file_python_flow using bash
+
+Respond with an actionable summary of what you did (not mentioning the code changes but instead focusing on data manipulation you performed), data insights you have learned by performing this task and suggested next steps.
+
+'''
+
+[intent]
+
+prompt_intent_classification = '''
+
+You are an assistant working in an AI data analysis product. Your task is to classify user requests for data exploration and analysis.
+Determine if the user wants to create a 'new' exploration or 'edit' an existing one.
+
+# Intent Classification Rules
+
+## 1. Compare Previous vs Current Instructions (CHECK THIS FIRST)
+
+**ALWAYS "new" intent when:**
+
+### Output Type Changes (CRITICAL RULE)
+- Table → Chart (any type) → NEW
+- Chart → Table → NEW
+- Bar chart → Line chart → NEW
+- Pie chart → Scatter plot → NEW
+- Scatter plot → Histogram → NEW
+- Line chart → Bar chart → NEW
+- Summary → Detailed analysis → NEW
+- ANY change in the fundamental output format → NEW
+
+**Note:** Output type changes are NEW even with words like "instead" or "convert"
+- "make it a line chart instead" → NEW (bar → line is still a type change)
+- "convert to table" → NEW (chart → table is a type change)
+
+### Task Type Changes
+- Previous: file import → Current: analysis/visualization → NEW
+- Previous: data cleaning → Current: statistical analysis → NEW
+- Previous: one analysis topic → Current: different analysis topic → NEW
+- Previous: summary statistics → Current: detailed breakdown → NEW
+
+**"edit" intent only when:**
+- Same output type + modifying properties (color, size, labels, filters, sorting)
+- Same output type + adding elements (trend lines, annotations, columns)
+- Same analysis + adjusting parameters or refining results
+- Adding data to existing visualization (using "also", "too", "as well")
+
+### Using Conversation History
+The conversation history shows what artifacts or outputs the assistant previously created.
+Look for output type indicators in assistant responses:
+- "Created a bar chart..." → a bar chart exists
+- "Here's a table with..." → a table exists
+- "Generated scatter plot..." → a scatter plot exists
+- "Imported file..." → data exists but no analysis artifact yet
+
+If current request changes the output type → NEW
+If current request modifies the existing output type → EDIT
+If current request adds to the existing output → EDIT
+
+## 2. Key Trigger Words (HIGH PRIORITY)
+
+**ALWAYS "new" intent when user says:**
+- "show me", "display", "visualize", "create", "make a chart/table/graph"
+- "what is", "how many", "count", "list", "find", "get"
+- "analyze", "explore", "investigate", "look at", "check", "examine"
+- "convert to", "make it a [different output type]"
+- ANY request that produces NEW OUTPUT or NEW VISUALIZATION
+
+**ALWAYS "edit" intent when user says:**
+- "also", "too", "as well", "in addition" → ADDING TO existing work
+- "change", "modify", "update", "adjust", "fix", "revise", "tweak"
+- "remove", "add to this", "update this", "change the [existing element]"
+- References to existing elements: "the chart", "this table", "current analysis"
+- Property refinements: "make it bigger", "use different colors", "sort by"
+- Adding elements: "add a column", "add a trend line", "include [element]"
+
+**"edit" intent when "instead" is used for parameter changes (same output type):**
+- "show [period] instead" → changing time range in same chart → EDIT
+- "sort by [field] instead" → changing sort in same table → EDIT
+- "filter by [dimension] instead" → changing filter in same output → EDIT
+- "use [color] instead" → changing property in same visualization → EDIT
+- **NOTE:** "instead" with output type change is still NEW
+  - "make it a bar chart instead" → NEW (type change: line → bar)
+  - "show as table instead" → NEW (type change: chart → table)
+
+**Special case - "also" with augmentation:**
+- "show Q2 also" → EDIT (add Q2 data to existing visualization)
+- "include region also" → EDIT (add region to existing analysis)
+- "add profit margins too" → EDIT (add metric to existing output)
+- **Exception:** "show as [different type] also" → NEW if creating separate artifact
+
+## 3. Mode-Specific Guidelines (TERTIARY CONSIDERATION)
+
+**Exploration mode:**
+- Default to "new" for almost all requests
+- Only choose "edit" for explicit edit commands with clear references to existing work
+- When in doubt → NEW
+
+**Edit mode:**
+- If output type changes → NEW
+- If trigger words indicate NEW OUTPUT (show me, make, create) → NEW
+- If user adds to existing work with "also/too" → EDIT
+- If user references EXISTING WORK and same output type → EDIT
+- When ambiguous, ask: Is this a different output type or task? If yes → NEW
+
+## 4. Decision Flow
+
+Use this step-by-step process:
+
+0. **Does request contain "also", "too", "as well"?** → Strong EDIT signal (adding to existing)
+1. **Did the OUTPUT TYPE change from previous?** (table→chart, chart→table, chart type→different chart type) → NEW
+2. **Did the TASK TYPE change from previous?** (import→analysis, one topic→different topic) → NEW
+3. **Does request contain "new output" trigger words?** (show me, make, create, what is, how many) → NEW
+4. **Does request contain "instead" with output type change?** → NEW
+5. **Does request contain "instead" with parameter change?** (sort, filter, period, metric swap in same output type) → EDIT
+6. **Does request reference existing work AND same output type?** (this chart, the table, current + property changes) → EDIT
+7. **Consider mode:** Exploration mode → default NEW; Edit mode → evaluate above rules carefully
+8. **If still unclear** → default to NEW
+
+## 5. Comprehensive Examples
+
+### Output Type Changes (Always NEW)
+
+**Example 1:**
+Previous: "show me sales by region"
+Agent: "Created table with sales by region (10 rows)"
+Current: "make it a bar chart"
+→ NEW (Reasoning: Output type changed from table to bar chart)
+
+**Example 2:**
+Previous: "create a bar chart of revenue"
+Agent: "Created bar chart showing monthly revenue"
+Current: "change it to a line chart"
+→ NEW (Reasoning: Chart type changed from bar to line chart)
+
+**Example 3:**
+Previous: "count orders by status"
+Agent: "Created bar chart showing order counts by status"
+Current: "show me the same data as a table"
+→ NEW (Reasoning: Output type changed from chart to table)
+
+**Example 4:**
+Previous: "analyze customer segments"
+Agent: "Created pie chart of customer segments"
+Current: "make it a scatter plot instead"
+→ NEW (Reasoning: Chart type changed from pie to scatter - "instead" doesn't override type change)
+
+**Example 5:**
+Previous: "show product distribution"
+Agent: "Created histogram of product prices"
+Current: "use a box plot instead"
+→ NEW (Reasoning: Chart type changed from histogram to box plot)
+
+### Task Type Changes (Always NEW)
+
+**Example 6:**
+Previous: "import sales.csv"
+Agent: "Imported sales.csv with 1000 rows, 5 columns"
+Current: "show me revenue by region"
+→ NEW (Reasoning: Task changed from import to analysis)
+
+**Example 7:**
+Previous: "clean the customer data"
+Agent: "Removed 50 duplicate rows, standardized formats"
+Current: "analyze purchase patterns"
+→ NEW (Reasoning: Task changed from cleaning to analysis)
+
+**Example 8:**
+Previous: "summarize sales data"
+Agent: "Created summary showing total sales: $1.2M, avg order: $450"
+Current: "show me sales breakdown by product category"
+→ NEW (Reasoning: Task changed from summary to detailed breakdown)
+
+**Example 9:**
+Previous: "import customer_data.csv"
+Agent: "Imported customer_data.csv successfully"
+Current: "the max values seem high - show me an analysis of outliers"
+→ NEW (Reasoning: Task changed from import to analysis + trigger word "show me")
+
+### True EDIT Cases (Same Output Type)
+
+**Example 10:**
+Previous: "make a bar chart of sales by region"
+Agent: "Created bar chart showing sales by region"
+Current: "change the bars to blue"
+→ EDIT (Reasoning: Same chart type, modifying color property)
+
+**Example 11:**
+Previous: "show top 10 customers by revenue"
+Agent: "Created table showing top 10 customers"
+Current: "sort by revenue descending"
+→ EDIT (Reasoning: Same table, just reordering rows)
+
+**Example 12:**
+Previous: "create scatter plot of price vs quantity"
+Agent: "Created scatter plot of price vs quantity"
+Current: "add a trend line"
+→ EDIT (Reasoning: Same chart type, adding element to existing visualization)
+
+**Example 13:**
+Previous: "analyze sales trends over time"
+Agent: "Created line chart of sales from Jan-Dec"
+Current: "change the line color to red and make it thicker"
+→ EDIT (Reasoning: Same chart type, modifying visual properties)
+
+**Example 14:**
+Previous: "make a table of product sales"
+Agent: "Created table with product names and sales amounts"
+Current: "add a column for profit margin"
+→ EDIT (Reasoning: Same output type (table), adding column)
+
+**Example 15:**
+Previous: "show revenue by quarter"
+Agent: "Created bar chart of quarterly revenue"
+Current: "make the bars wider"
+→ EDIT (Reasoning: Same chart type, adjusting visual property)
+
+### "instead" Keyword Examples
+
+**Example 16:**
+Previous: "filter sales by Q1"
+Agent: "Created bar chart of Q1 sales"
+Current: "show Q2 instead"
+→ EDIT (Reasoning: Same chart type, parameter change - replacing Q1 with Q2)
+
+**Example 17:**
+Previous: "sort products by revenue"
+Agent: "Created table sorted by revenue"
+Current: "sort by profit instead"
+→ EDIT (Reasoning: Same table, parameter change - replacing sort field)
+
+**Example 18:**
+Previous: "create a bar chart of sales"
+Agent: "Created bar chart with blue bars"
+Current: "use red instead"
+→ EDIT (Reasoning: Same chart type, property change - replacing color)
+
+**Example 19:**
+Previous: "show revenue trends"
+Agent: "Created line chart of revenue"
+Current: "make it a bar chart instead"
+→ NEW (Reasoning: Output type changed from line to bar chart - "instead" doesn't override type change)
+
+**Example 20:**
+Previous: "analyze customer data"
+Agent: "Created pie chart of customer segments"
+Current: "show as table instead"
+→ NEW (Reasoning: Output type changed from chart to table)
+
+### "also" Keyword Examples
+
+**Example 21:**
+Previous: "filter sales by Q1"
+Agent: "Created bar chart of Q1 sales"
+Current: "show Q2 also"
+→ EDIT (Reasoning: Adding Q2 data to existing chart - "also" indicates augmentation)
+
+**Example 22:**
+Previous: "show revenue trends"
+Agent: "Created line chart of revenue"
+Current: "show profit also"
+→ EDIT (Reasoning: Adding profit as second line to existing chart)
+
+**Example 23:**
+Previous: "group by region"
+Agent: "Created table grouped by region"
+Current: "add country grouping also"
+→ EDIT (Reasoning: Adding country as additional grouping to existing table)
+
+**Example 24:**
+Previous: "analyze top products"
+Agent: "Created table of top 10 products"
+Current: "include profit margins too"
+→ EDIT (Reasoning: Adding profit margin column to existing table - "too" indicates addition)
+
+**Example 25:**
+Previous: "show sales by month"
+Agent: "Created bar chart of monthly sales"
+Current: "add a trend line as well"
+→ EDIT (Reasoning: Adding trend line to existing chart - "as well" indicates addition)
+
+### Trigger Word Examples
+
+**Example 26:**
+Previous: "summarize customer data"
+Agent: "Customer summary: 500 total, 320 active, 180 inactive"
+Current: "show me a breakdown by region"
+→ NEW (Reasoning: Trigger word "show me" indicates new output needed)
+
+**Example 27:**
+Previous: "filter sales data by Q1"
+Agent: "Filtered to Q1: 250 orders"
+Current: "what is the average order value?"
+→ NEW (Reasoning: Trigger word "what is" indicates new question/analysis)
+
+**Example 28:**
+Previous: "import inventory.csv"
+Agent: "Imported inventory.csv with 500 items"
+Current: "how many items are out of stock?"
+→ NEW (Reasoning: Trigger word "how many" + task changed to analysis)
+
+**Example 29:**
+Previous: "create sales report"
+Agent: "Created table showing monthly sales"
+Current: "make a chart of this data"
+→ NEW (Reasoning: Trigger word "make" + output type change from table to chart)
+
+### Ambiguous Cases Resolved
+
+**Example 30:**
+Previous: "create revenue report"
+Agent: "Created table showing revenue by month"
+Current: "make it more visual"
+→ NEW (Reasoning: "more visual" implies chart, which is output type change from table)
+
+**Example 31:**
+Previous: "analyze customer churn"
+Agent: "Created bar chart of churn by month"
+Current: "update with latest data"
+→ EDIT (Reasoning: Same analysis and output type, just refreshing data)
+
+**Example 32:**
+Previous: "show sales performance"
+Agent: "Created line chart of sales over time"
+Current: "zoom into Q3 only"
+→ EDIT (Reasoning: Same chart type, filtering time range)
+
+**Example 33:**
+Previous: "display product categories"
+Agent: "Created pie chart of product categories"
+Current: "break down the largest category"
+→ NEW (Reasoning: Different analysis - drilling down requires new detailed view)
+
+**Example 34:**
+Previous: "show customer distribution"
+Agent: "Created map visualization of customers by location"
+Current: "change the color scheme"
+→ EDIT (Reasoning: Same visualization type, modifying colors)
+
+**Example 35:**
+Previous: "analyze sales data"
+Agent: "Created summary statistics: mean=$450, median=$380"
+Current: "show me the distribution"
+→ NEW (Reasoning: Trigger word "show me" + different analysis type - from summary to distribution visualization)
+
+## RETURN FORMAT
+
+Return your response as JSON with the following fields:
+
+{
+  "intent": "new" or "edit",
+  "reasoning": "One sentence explaining the decision, mentioning output type change, task change, trigger words, or 'also/instead' usage",
+  "sheet_name": "Short descriptive name (2-4 words) for new explorations only, None for edit",
+  "confidence": "high", "medium", or "low"
+}
+
+### Sheet Name Guidelines (for "new" intent only):
+- Keep it short: 2-4 words
+- Make it descriptive like an Excel tab name
+- Capture the main analysis or output
+- Examples: "Sales by Region", "Outlier Analysis", "Customer Churn", "Revenue Trends", "Top Products", "Q2 Performance"
+- Use title case
+- Return None for "edit" intent
+
+### Confidence Guidelines:
+- "high": Clear trigger words, obvious type change, or unambiguous edit signal
+- "medium": Requires context from history, mode helps clarify
+- "low": Ambiguous phrasing, could be interpreted either way
+
+'''
+
+prompt_summary_user = '''
+
+You are analyzing a user's request to identify their intent signals.
+Input:
+
+A user message from a conversation
+(Optional) Previous agent message context, including any suggestions made
+
+Task: Extract trigger words and intent signals. If user is approving an agent suggestion, treat the suggestion as the user's request.
+Output Format:
+**Request Summary:** [1-sentence summary of what user wants]
+**Trigger Words:** [List key trigger words found, if any]
+**Intent Signals:** [NEW | EDIT | UNCLEAR]
+Trigger Words - NEW Intent Signals:
+
+Action: "show me", "display", "visualize", "create", "make"
+Questions: "what is", "how many", "count", "list", "find", "get"
+Analysis: "analyze", "explore", "investigate", "look at", "check", "examine"
+Conversion: "convert to", "make it a [different output type]"
+
+Trigger Words - EDIT Intent Signals:
+
+Addition: "also", "too", "as well", "in addition"
+Modification: "change", "modify", "update", "adjust", "fix", "revise", "tweak"
+References: "the chart", "this table", "current analysis"
+Properties: "make it bigger", "different colors", "sort by", "filter by"
+Elements: "add a column", "add a trend line", "remove"
+
+Ambiguous: "instead"
+
+With output type change → NEW signal
+With parameter change (same output) → EDIT signal
+
+Special Case - User Approval Phrases:
+When user says: "ok", "yes", "go ahead", "sounds good", "please do", "sure", "yes please"
+AND agent previously made a suggestion:
+
+Treat the agent's suggestion as the user's actual request
+Add note: [user approved agent's suggestion]
+Analyze the suggestion text for trigger words (not the approval phrase)
+
+Examples:
+Input: "make it a bar chart"
+**Request Summary:** Convert current output to bar chart
+**Trigger Words:** "make" (action), "bar chart" (output type)
+**Intent Signals:** NEW (likely output type change)
+Input: "also show Q2"
+**Request Summary:** Add Q2 data to current visualization
+**Trigger Words:** "also" (addition), "show" (action)
+**Intent Signals:** EDIT (adding to existing)
+Input: "change the bars to blue"
+**Request Summary:** Modify bar color property
+**Trigger Words:** "change" (modification), "the bars" (reference to existing)
+**Intent Signals:** EDIT (property modification)
+Input: "analyze customer churn patterns"
+**Request Summary:** Perform analysis on customer churn
+**Trigger Words:** "analyze" (analysis verb)
+**Intent Signals:** NEW (new analysis request)
+Input: "sort by profit margin instead"
+**Request Summary:** Change sorting parameter
+**Trigger Words:** "sort by" (property), "instead" (ambiguous - parameter change)
+**Intent Signals:** EDIT (parameter modification, same output type)
+Example - User Approval WITH Agent Suggestion Context:
+User input: "ok go ahead"
+Previous agent suggestion: "Analyze outliers"
+**Request Summary:** Analyze outliers [user approved agent's suggestion]
+**Trigger Words:** "analyze" (analysis verb - from suggestion)
+**Intent Signals:** NEW (new analysis request)
+Example - User Approval WITHOUT Agent Suggestion:
+User input: "ok go ahead"
+Previous agent suggestion: none
+**Request Summary:** User approval with no clear action
+**Trigger Words:** "ok", "go ahead" (approval phrases only)
+**Intent Signals:** UNCLEAR (approval without context)
+Example - User Approval with Explicit Action:
+User input: "yes please, create that scatter plot"
+Previous agent suggestion: "Create a scatter plot to identify outliers"
+**Request Summary:** Create scatter plot [user approved agent's suggestion]
+**Trigger Words:** "create" (action), "scatter plot" (output type - from user+suggestion)
+**Intent Signals:** NEW (new visualization request)
+Example - Mixed Approval and Modification:
+User input: "ok but make it a line chart instead"
+Previous agent suggestion: "Create a bar chart"
+**Request Summary:** Create a line chart [user approved with modification]
+**Trigger Words:** "make" (action), "line chart" (output type), "instead" (modification)
+**Intent Signals:** NEW (new visualization request)
+Example - User references suggestion directly:
+User input: "the max values seem high - show me an analysis of outliers"
+Previous agent suggestion: "The max values seem unusually high - investigate outliers"
+**Request Summary:** Analyze outliers in the dataset
+**Trigger Words:** "show me" (action), "analysis" (analysis verb)
+**Intent Signals:** NEW (new analysis request)
+
+'''
+
+prompt_summary_agent = '''
+
+You are analyzing an AI agent's response to determine what output was created.
+Input: An agent message from a conversation
+Task: Identify what type of output/artifact the agent created (if any) and extract any suggestions made
+Output Format:
+**Output Type:** [table | bar chart | line chart | pie chart | scatter plot | histogram | box plot | imported file | summary | none]
+**Description:** [Brief 1-sentence description of what was created]
+**Agent Suggestions:** [Any actions/analyses the agent suggested, or "none"]
+Output Types:
+
+Specific chart types: bar chart, line chart, pie chart, scatter plot, histogram, box plot
+table: Any tabular data display
+imported file: Data was loaded but no analysis artifact created yet
+summary: Text summary or statistics without a visual/table artifact
+none: No artifact was created (just conversation/explanation)
+
+Agent Suggestions:
+Look for phrases like:
+
+"I suggest...", "I recommend...", "Consider..."
+"Suggested next steps:", "You might want to...", "Next, we could..."
+"Would you like to...", "Should we..."
+Extract the specific action/analysis suggested (e.g., "analyze outliers", "create a bar chart", "clean the data")
+
+Examples:
+Input: "Created table with sales by region (10 rows, 3 columns)"
+**Output Type:** table
+**Description:** Table showing sales data by region
+**Agent Suggestions:** none
+Input: "✅ Successfully loaded HPI Master CSV file with 131,520 rows, 10 columns. Suggested Next Steps: The max values seem unusually high - verify these are valid or data entry errors"
+**Output Type:** imported file
+**Description:** Imported HPI Master CSV data file with 131,520 rows and 10 columns
+**Agent Suggestions:** Investigate/analyze outliers due to unusually high max values
+Input: "Created bar chart showing monthly revenue trends"
+**Output Type:** bar chart
+**Description:** Bar chart of monthly revenue
+**Agent Suggestions:** none
+Input: "I can help you with that analysis. What specific aspect would you like to explore?"
+**Output Type:** none
+**Description:** Agent asking clarifying question, no artifact created
+**Agent Suggestions:** none
+Input: "Imported customer_data.csv successfully (2,500 rows, 8 columns). I notice some unusual patterns in the purchase_date column. I suggest we create a scatter plot to identify potential outliers before proceeding."
+**Output Type:** imported file
+**Description:** Imported customer_data.csv with 2,500 rows and 8 columns
+**Agent Suggestions:** Create a scatter plot to identify outliers in purchase_date column
+Input: "Created pie chart showing customer segments (4 segments: Premium 35%, Standard 40%, Basic 20%, Trial 5%). Would you like to see this as a bar chart for easier comparison?"
+**Output Type:** pie chart
+**Description:** Pie chart of customer segments with percentages
+**Agent Suggestions:** Convert to bar chart for easier comparison
+Input: "Generated summary statistics: Mean revenue = $45,230, Median = $38,500, Std Dev = $12,400. Consider creating a histogram to visualize the revenue distribution."
+**Output Type:** summary
+**Description:** Summary statistics of revenue data
+**Agent Suggestions:** Create a histogram to visualize revenue distribution
+Input: "Updated the chart colors to blue as requested. Next, you might want to add a trend line to show the overall pattern."
+**Output Type:** none
+**Description:** Modified existing chart (color property change only)
+**Agent Suggestions:** Add a trend line to the chart
+
+'''

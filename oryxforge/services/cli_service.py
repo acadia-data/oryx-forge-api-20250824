@@ -17,6 +17,9 @@ class CLIService:
     Service class for CLI operations including user configuration and project management.
     """
 
+    # Valid project modes
+    VALID_MODES = {'explore', 'edit', 'plan'}
+
     def __init__(self, user_id: str = None, cwd: str = None):
         """
         Initialize CLI service.
@@ -117,6 +120,58 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to list projects: {str(e)}")
 
+    def _load_config(self) -> ConfigObj:
+        """
+        Load project configuration file.
+
+        Returns:
+            ConfigObj: Configuration object
+        """
+        config = ConfigObj()
+        if self.project_config_file.exists():
+            config = ConfigObj(str(self.project_config_file))
+        return config
+
+    def _save_config(self, config: ConfigObj) -> None:
+        """
+        Save project configuration file.
+
+        Args:
+            config: Configuration object to save
+        """
+        config.filename = str(self.project_config_file)
+        config.write()
+
+    def _config_update(self, key: str, value: str) -> None:
+        """
+        Update a key in the 'active' section of project configuration.
+
+        Args:
+            key: Configuration key to update
+            value: Configuration value to set
+        """
+        config = self._load_config()
+        if 'active' not in config:
+            config['active'] = {}
+        config['active'][key] = value
+        self._save_config(config)
+
+    def _config_get(self, key: str) -> Optional[str]:
+        """
+        Get a value from the 'active' section of project configuration.
+
+        Args:
+            key: Configuration key to retrieve
+
+        Returns:
+            Optional[str]: Configuration value or None if not found
+        """
+        if not self.project_config_file.exists():
+            return None
+        config = self._load_config()
+        active_section = config.get('active', {})
+        return active_section.get(key)
+
     def project_activate(self, project_id: str) -> None:
         """
         Activate a project by updating local configuration using CredentialsManager.
@@ -160,17 +215,8 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to validate dataset: {str(e)}")
 
-        # Update config
-        config = ConfigObj()
-        if self.project_config_file.exists():
-            config = ConfigObj(str(self.project_config_file))
-
-        if 'active' not in config:
-            config['active'] = {}
-        config['active']['dataset_id'] = dataset_id
-
-        config.filename = str(self.project_config_file)
-        config.write()
+        # Update config using helper
+        self._config_update('dataset_id', dataset_id)
 
         logger.success(f"Activated dataset {dataset_id}")
 
@@ -198,23 +244,14 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to validate datasheet: {str(e)}")
 
-        # Update config
-        config = ConfigObj()
-        if self.project_config_file.exists():
-            config = ConfigObj(str(self.project_config_file))
-
-        if 'active' not in config:
-            config['active'] = {}
-        config['active']['sheet_id'] = sheet_id
-
-        config.filename = str(self.project_config_file)
-        config.write()
+        # Update config using helper
+        self._config_update('sheet_id', sheet_id)
 
         logger.success(f"Activated datasheet {sheet_id}")
 
     def get_active(self) -> Dict[str, str]:
         """
-        Get active project, dataset, and datasheet from local configuration.
+        Get active project, dataset, datasheet, and mode from local configuration.
 
         Returns:
             Dict with active IDs including user_id and project_id from profile
@@ -227,18 +264,47 @@ class CLIService:
             # No profile set, return empty dict
             return {}
 
-        # Also get dataset and sheet from config if exists
+        # Also get dataset, sheet, and mode from config if exists
         result = {'user_id': profile['user_id'], 'project_id': profile['project_id']}
 
         if self.project_config_file.exists():
-            config = ConfigObj(str(self.project_config_file))
+            config = self._load_config()
             active_section = config.get('active', {})
             if 'dataset_id' in active_section:
                 result['dataset_id'] = active_section['dataset_id']
             if 'sheet_id' in active_section:
                 result['sheet_id'] = active_section['sheet_id']
+            if 'mode' in active_section:
+                result['mode'] = active_section['mode']
 
         return result
+
+    def mode_set(self, mode: str) -> None:
+        """
+        Set the project mode.
+
+        Args:
+            mode: Project mode to set (must be one of: explore, edit, plan)
+
+        Raises:
+            ValueError: If mode is not valid
+        """
+        if mode not in self.VALID_MODES:
+            raise ValueError(
+                f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(self.VALID_MODES))}"
+            )
+
+        self._config_update('mode', mode)
+        logger.success(f"Project mode set to '{mode}'")
+
+    def mode_get(self) -> Optional[str]:
+        """
+        Get the current project mode.
+
+        Returns:
+            Optional[str]: Current mode or None if not set
+        """
+        return self._config_get('mode')
 
     def interactive_project_select(self) -> str:
         """

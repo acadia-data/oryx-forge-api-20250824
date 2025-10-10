@@ -167,36 +167,57 @@ def workflow_run_flow(sheet: str, dataset: Optional[str] = None, flow_params: Op
 
 
 # Project management functions
-def project_create_dataset(name: str) -> str:
+def project_create_dataset(name: str) -> dict[str, str]:
     """Create a new dataset in the current project.
 
     Uses profile from .oryxforge configuration to get user_id and project_id.
+    The display name will be automatically converted to a Python-safe name_python (snake_case).
 
     Args:
-        name: The display name for the new dataset (will be converted to name_python internally)
+        name: The display name for the new dataset (e.g., 'My Data Sources')
+              Must be unique for user/project combination
 
     Returns:
-        The ID of the newly created dataset
+        Dict with keys:
+            - id: Dataset UUID
+            - name: Dataset display name
+            - name_python: Python-safe name in snake_case (e.g., 'my_data_sources')
+
+    Raises:
+        ValueError: If dataset name already exists for this user/project
     """
     project_service = ProjectService()
+    # ds_create now returns full dataset dict with id, name, name_python
     return project_service.ds_create(name)
 
 
-def project_create_sheet(dataset_id: str, name: str) -> str:
+def project_create_sheet(dataset_id: str, name: str, source_id: Optional[str] = None) -> dict[str, str]:
     """Create a new datasheet in the specified dataset.
 
     Uses profile from .oryxforge configuration to get user_id and project_id.
+    The display name will be automatically converted to a Python-safe name_python (PascalCase).
+
+    Uses upsert behavior - if a sheet with the same (user_owner, dataset_id, name) already exists,
+    returns the existing sheet data instead of failing.
 
     Args:
         dataset_id: The ID of the dataset to create the sheet in
-        name: The display name for the new datasheet (will be converted to name_python internally)
+        name: The display name for the new datasheet (e.g., 'HPI Master CSV')
+        source_id: Optional UUID of data_sources entry that this sheet is imported from
+                   Links the datasheet to its original data source
 
     Returns:
-        The ID of the newly created datasheet
+        Dict with keys:
+            - id: Datasheet UUID
+            - name: Datasheet display name
+            - name_python: Python-safe name in PascalCase (e.g., 'HpiMasterCsv')
+            - dataset_id: Parent dataset UUID
+
+    Raises:
+        ValueError: If dataset doesn't exist or user lacks access
     """
     project_service = ProjectService()
-    sheet_data = project_service.sheet_create(dataset_id, name)
-    return sheet_data['id']
+    return project_service.sheet_create(dataset_id, name, source_id=source_id)
 
 
 def project_list_datasets() -> list[dict]:

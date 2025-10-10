@@ -317,7 +317,7 @@ class TestCLIService:
         try:
             # Create ProjectService to manage datasets
             proj_service = ProjectService(project_id, self.USER_ID)
-            dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')
+            dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')['id']
 
             # Activate the dataset
             cli_service.dataset_activate(dataset_id)
@@ -349,7 +349,7 @@ class TestCLIService:
         try:
             # Create ProjectService to manage datasets and sheets
             proj_service = ProjectService(project_id, self.USER_ID)
-            dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')
+            dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')['id']
             sheet_data = proj_service.sheet_create(dataset_id, f'sheet_in_{test_project_name}')
             sheet_id = sheet_data['id']
 
@@ -513,7 +513,7 @@ class TestCLIService:
                 dataset_id = sources_dataset['id']
             except ValueError:
                 # Create Sources dataset if it doesn't exist
-                dataset_id = proj_service.ds_create("Sources")
+                dataset_id = proj_service.ds_create("Sources")['id']
 
             # Create CLIService with working directory that has profile
             cli_service = CLIService(cwd=str(temp_working_dir))

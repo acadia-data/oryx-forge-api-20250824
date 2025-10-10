@@ -133,7 +133,9 @@ def project_create_dataset(name: str) -> str:
         The ID of the newly created dataset
     """
     project_service = ProjectService()
-    return project_service.ds_create(name)
+    # ds_create now returns dict with id, name, name_python - extract just the ID
+    result = project_service.ds_create(name)
+    return result['id']
 
 
 @tool

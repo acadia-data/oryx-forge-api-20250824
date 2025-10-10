@@ -107,6 +107,121 @@ The pull command:
 - Activates the project locally
 - Auto-activates the default "scratchpad" dataset and first datasheet
 
+## Project Mode Management
+
+### Set Project Mode
+
+Configure the project mode to control how the AI agent interprets your requests and responds to your commands:
+
+```bash
+# Set to explore mode
+oryxforge admin mode set explore
+
+# Set to edit mode
+oryxforge admin mode set edit
+
+# Set to plan mode
+oryxforge admin mode set plan
+```
+
+**Available Modes:**
+
+#### Explore Mode (Default)
+**When to use:** Initial data discovery, trying different visualizations, answering new questions
+
+In explore mode, the AI assumes you want to **create new outputs** for most requests:
+- "Show me sales by region" → Creates a new visualization
+- "What is the average order value?" → Creates a new analysis
+- "Make a bar chart" → Creates a new chart
+- When in doubt, the AI defaults to creating something **new**
+
+**Intent interpretation:**
+- Almost all requests are treated as **"new"** explorations
+- Only explicit edit commands (with clear references like "change this chart's color") are treated as edits
+- Best for: Brainstorming, exploring different views, asking multiple questions
+
+#### Edit Mode
+**When to use:** Refining existing work, making adjustments to visualizations, iterating on analysis
+
+In edit mode, the AI is more careful about when to create new outputs vs. modify existing ones:
+- "Show Q2 also" → **Edits** existing chart by adding Q2 data (uses "also" keyword)
+- "Change the bars to blue" → **Edits** existing chart properties
+- "Sort by profit instead" → **Edits** existing table (parameter change)
+- "Make it a line chart instead" → Creates **new** chart (output type changed)
+- "Show me revenue trends" → Creates **new** analysis (trigger words)
+
+**Intent interpretation:**
+- Request changes **output type** (table→chart, bar→line) → **New** exploration
+- Request contains **"show me", "create", "what is"** → **New** exploration
+- Request uses **"also", "too", "as well"** → **Edit** existing work
+- Request references existing work with **"change", "update", "add to this"** → **Edit**
+- Task type changes (import→analysis, one topic→different topic) → **New** exploration
+
+**Best for:** Refining visualizations, adding elements, adjusting filters/colors/properties
+
+#### Plan Mode
+**When to use:** Designing multi-step workflows, planning data pipelines, strategic analysis
+
+In plan mode, the AI focuses on helping you structure and organize complex tasks:
+- Breaking down complex analyses into steps
+- Planning data transformation workflows
+- Designing multi-stage explorations
+- Creating reusable analysis patterns
+
+**Best for:** Strategic planning, workflow design, complex multi-step analyses
+
+---
+
+### Understanding Intent Classification
+
+The mode affects how ambiguous requests are interpreted. Here are key examples:
+
+**Scenario: You have a bar chart showing Q1 sales**
+
+| Your Request | Explore Mode | Edit Mode |
+|--------------|--------------|-----------|
+| "show Q2 also" | New chart (safer default) | Edit existing chart (adds Q2 data) |
+| "make it a line chart" | New line chart | New line chart (type changed) |
+| "change bars to blue" | Edit colors | Edit colors |
+| "show me profit trends" | New analysis | New analysis (trigger words) |
+| "sort by revenue instead" | New output (safer default) | Edit sorting (parameter change) |
+
+**Key Trigger Words:**
+- **"also", "too", "as well"** → Strong signal to **edit** (adding to existing)
+- **"show me", "what is", "create"** → Strong signal for **new** output
+- **"instead"** with type change → **New** (e.g., "line chart instead of bar")
+- **"instead"** with parameter → **Edit** in edit mode (e.g., "Q2 instead of Q1")
+
+### When Output Type Changes → Always New
+
+**These always create new explorations, regardless of mode:**
+- Table → Any chart type
+- Chart → Table
+- Bar chart → Line chart
+- Any fundamental output format change
+
+**Example:** "Convert this to a pie chart" always creates a **new** pie chart, even in edit mode.
+
+### Get Project Mode
+
+View the currently configured project mode:
+
+```bash
+oryxforge admin mode get
+```
+
+Output example:
+```
+Current project mode: explore
+```
+
+If no mode is set:
+```
+No project mode set.
+Available modes: edit, explore, plan
+Set a mode with: oryxforge admin mode set <mode>
+```
+
 ## Dataset Management
 
 ### Activate Dataset
@@ -202,9 +317,10 @@ oryxforge admin status
 Output example:
 ```
 User ID: 550e8400-e29b-41d4-a716-446655440000
-Active Project: abc123...
+Project ID: abc123...
 Active Dataset: def456...
 Active Datasheet: ghi789...
+Project Mode: explore
 Working Directory: /home/user/my-project
 ```
 
@@ -264,6 +380,9 @@ oryxforge admin status
 # See current active items
 oryxforge admin status
 
+# Set project mode
+oryxforge admin mode set explore
+
 # Switch to different dataset
 oryxforge admin dataset activate --name view
 
@@ -314,4 +433,37 @@ For additional help, run any command with `--help`:
 oryxforge admin --help
 oryxforge admin projects --help
 oryxforge admin pull --help
+oryxforge admin mode --help
+oryxforge admin mode set --help
+oryxforge admin mode get --help
+```
+
+## Command Reference
+
+### Profile Commands
+- `oryxforge admin profile set --userid <id> --projectid <id>` - Set user profile
+- `oryxforge admin profile get` - View current profile
+- `oryxforge admin profile clear` - Clear profile configuration
+
+### Project Commands
+- `oryxforge admin projects list` - List all projects
+- `oryxforge admin projects create <name>` - Create new project
+- `oryxforge admin projects import <filepath>` - Import data file
+- `oryxforge admin pull [--id <id>] [--cwd <path>]` - Pull and activate project
+
+### Mode Commands
+- `oryxforge admin mode set <mode>` - Set project mode (explore/edit/plan)
+- `oryxforge admin mode get` - Get current project mode
+
+### Dataset Commands
+- `oryxforge admin datasets list` - List all datasets
+- `oryxforge admin datasets activate [--id <id>] [--name <name>]` - Activate dataset
+
+### Datasheet Commands
+- `oryxforge admin sheets list [--dataset-id <id>]` - List datasheets
+- `oryxforge admin sheets activate [--id <id>] [--name <name>]` - Activate datasheet
+
+### Utility Commands
+- `oryxforge admin status` - Show current configuration status
+- `oryxforge admin config` - Show configuration file contents
 ```

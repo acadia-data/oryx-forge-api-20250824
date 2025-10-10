@@ -156,45 +156,77 @@ class ProjectService:
         except Exception as e:
             raise ValueError(f"Failed to list datasets: {str(e)}")
 
-    def ds_create(self, name: str) -> str:
+    def ds_create(self, name: str) -> Dict[str, str]:
         """Create a new dataset in the current project.
 
         The name will be automatically converted to a Python-safe name_python (snake_case).
 
+        Uses upsert to handle idempotent operations - if a dataset with the same
+        (user_owner, project_id, name) already exists, returns the existing dataset data.
+
         Args:
             name: Dataset display name (e.g., 'My Data Sources')
-                  Must be unique for user/project
 
         Returns:
-            str: Created dataset UUID
+            Dict[str, str]: Dict with keys:
+                - id: Dataset UUID
+                - name: Dataset display name
+                - name_python: Python-safe name (snake_case)
 
         Raises:
-            ValueError: If dataset name already exists for this user/project
+            ValueError: If dataset creation fails
         """
         try:
             response = (
                 self.supabase_client.table("datasets")
-                .insert({
+                .upsert({
                     "name": name,
                     "user_owner": self.user_id,
                     "project_id": self.project_id
-                })
+                },
+                on_conflict="user_owner,project_id,name")
                 .execute()
             )
 
             if not response.data:
                 raise ValueError("Failed to create dataset")
 
-            dataset_id = response.data[0]['id']
-            logger.success(f"Created dataset '{name}' with ID: {dataset_id}")
-            return dataset_id
+            dataset_data = response.data[0]
+            logger.success(f"Dataset '{name}' ready with ID: {dataset_data['id']}")
+
+            # Return relevant fields
+            return {
+                'id': dataset_data['id'],
+                'name': dataset_data['name'],
+                'name_python': dataset_data['name_python']
+            }
 
         except Exception as e:
-            if "unique_user_dataset_name" in str(e):
-                raise ValueError(f"Dataset '{name}' already exists in this project")
             raise ValueError(f"Failed to create dataset: {str(e)}")
 
-    def sheet_create(self, dataset_id: str, name: str) -> Dict[str, str]:
+    def ds_create_get(self, name: str) -> Dict[str, str]:
+        """Create a new dataset in the current project.
+
+        The name will be automatically converted to a Python-safe name_python (snake_case).
+
+        Uses upsert to handle idempotent operations - if a dataset with the same
+        (user_owner, project_id, name) already exists, returns the existing dataset data.
+
+        Args:
+            name: Dataset display name (e.g., 'My Data Sources')
+
+        Returns:
+            Dict[str, str]: Dict with keys:
+                - id: Dataset UUID
+                - name: Dataset display name
+                - name_python: Python-safe name (snake_case)
+
+        Raises:
+            ValueError: If dataset creation fails
+        """
+        return self.ds_create(name)
+
+    def sheet_create(self, dataset_id: str, name: str, source_id: Optional[str] = None) -> Dict[str, str]:
         """Create a new datasheet in the specified dataset.
 
         The name will be automatically converted to a Python-safe name_python (PascalCase).
@@ -205,6 +237,7 @@ class ProjectService:
         Args:
             dataset_id: Dataset UUID
             name: Datasheet display name (e.g., 'HPI Master CSV')
+            source_id: Optional UUID of data_sources entry that this sheet is imported from
 
         Returns:
             Dict[str, str]: Dict with keys:
@@ -221,13 +254,20 @@ class ProjectService:
             raise ValueError(f"Dataset {dataset_id} not found or access denied")
 
         try:
+            # Build upsert data
+            upsert_data = {
+                "name": name,
+                "user_owner": self.user_id,
+                "dataset_id": dataset_id
+            }
+
+            # Add source_id if provided
+            if source_id is not None:
+                upsert_data["source_id"] = source_id
+
             response = (
                 self.supabase_client.table("datasheets")
-                .upsert({
-                    "name": name,
-                    "user_owner": self.user_id,
-                    "dataset_id": dataset_id
-                },
+                .upsert(upsert_data,
                 on_conflict="user_owner,dataset_id,name")
                 .execute()
             )

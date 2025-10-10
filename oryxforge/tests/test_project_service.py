@@ -126,7 +126,14 @@ class TestProjectService:
     def test_ds_create_success(self, project_service, test_dataset_name):
         """Test successful dataset creation."""
         # Create a dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        result = project_service.ds_create(test_dataset_name)
+        assert isinstance(result, dict)
+        assert 'id' in result
+        assert 'name' in result
+        assert 'name_python' in result
+        assert result['name'] == test_dataset_name
+
+        dataset_id = result['id']
         assert isinstance(dataset_id, str)
         assert len(dataset_id) > 0
 
@@ -143,18 +150,24 @@ class TestProjectService:
             pass
 
     def test_ds_create_duplicate_name(self, project_service, test_dataset_name):
-        """Test dataset creation with duplicate name."""
+        """Test dataset creation with duplicate name - should be idempotent with upsert."""
         # Create first dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        result1 = project_service.ds_create(test_dataset_name)
+        dataset_id1 = result1['id']
 
         try:
-            # Try to create another with same name
-            with pytest.raises(ValueError, match="already exists"):
-                project_service.ds_create(test_dataset_name)
+            # Create another with same name - should return same dataset (upsert behavior)
+            result2 = project_service.ds_create(test_dataset_name)
+            dataset_id2 = result2['id']
+
+            # Should return the same dataset ID (idempotent)
+            assert dataset_id1 == dataset_id2
+            assert result1['name'] == result2['name']
+            assert result1['name_python'] == result2['name_python']
         finally:
             # Clean up
             try:
-                project_service.supabase_client.table("datasets").delete().eq("id", dataset_id).execute()
+                project_service.supabase_client.table("datasets").delete().eq("id", dataset_id1).execute()
             except Exception:
                 pass
 
@@ -167,7 +180,7 @@ class TestProjectService:
     def test_sheet_create_success(self, project_service, test_dataset_name, test_sheet_name):
         """Test successful datasheet creation."""
         # First create a dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             # Create a sheet in the dataset
@@ -200,7 +213,7 @@ class TestProjectService:
     def test_sheet_create_duplicate_name(self, project_service, test_dataset_name, test_sheet_name):
         """Test datasheet creation with duplicate name (idempotent with upsert)."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data_1 = project_service.sheet_create(dataset_id, test_sheet_name)
 
         try:
@@ -218,7 +231,7 @@ class TestProjectService:
     def test_sheet_list_specific_dataset(self, project_service, test_dataset_name):
         """Test datasheet listing for specific dataset."""
         # Create a dataset first
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             # List sheets for this specific dataset (should be empty initially)
@@ -272,7 +285,7 @@ class TestProjectService:
     def test_ds_exists_true(self, project_service, test_dataset_name):
         """Test ds_exists returns True for existing dataset."""
         # Create a dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             # Check that it exists
@@ -307,7 +320,7 @@ class TestProjectService:
     def test_sheet_exists_true(self, project_service, test_dataset_name, test_sheet_name):
         """Test sheet_exists returns True for existing sheet."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
         sheet_id = sheet_data['id']
 
@@ -343,7 +356,7 @@ class TestProjectService:
     def test_get_default_dataset_id_success(self, project_service):
         """Test successful default dataset retrieval."""
         # Create an exploration dataset
-        exploration_id = project_service.ds_create('exploration')
+        exploration_id = project_service.ds_create('exploration')['id']
 
         try:
             result = project_service._get_default_dataset_id()
@@ -379,7 +392,7 @@ class TestProjectService:
     def test_get_first_sheet_id_success(self, project_service, test_dataset_name, test_sheet_name):
         """Test successful first sheet retrieval."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
         sheet_id = sheet_data['id']
 
@@ -397,7 +410,7 @@ class TestProjectService:
     def test_get_first_sheet_id_no_sheets(self, project_service, test_dataset_name):
         """Test first sheet retrieval with no sheets."""
         # Create dataset but no sheets
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             with pytest.raises(ValueError, match="No datasheets found"):
@@ -419,7 +432,7 @@ class TestProjectService:
     def test_interactive_dataset_select_success(self, project_service, test_dataset_name):
         """Test successful interactive dataset selection."""
         # Create a dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             with patch('builtins.input', return_value='1'):
@@ -450,7 +463,7 @@ class TestProjectService:
     def test_interactive_sheet_select_success(self, project_service, test_dataset_name, test_sheet_name):
         """Test successful interactive sheet selection."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
         sheet_id = sheet_data['id']
 
@@ -482,7 +495,7 @@ class TestProjectService:
     def test_ds_get_by_name_success(self, project_service, test_dataset_name):
         """Test successful dataset retrieval by name."""
         # Create a dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             result = project_service.ds_get(name=test_dataset_name)
@@ -499,7 +512,7 @@ class TestProjectService:
     def test_ds_get_by_id_success(self, project_service, test_dataset_name):
         """Test successful dataset retrieval by ID."""
         # Create a dataset
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             result = project_service.ds_get(id=dataset_id)
@@ -525,7 +538,7 @@ class TestProjectService:
     def test_sheet_get_by_name_with_dataset(self, project_service, test_dataset_name, test_sheet_name):
         """Test successful sheet retrieval by name with dataset ID."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
         sheet_id = sheet_data['id']
 
@@ -546,7 +559,7 @@ class TestProjectService:
     def test_sheet_get_by_name_all_datasets(self, project_service, test_dataset_name, test_sheet_name):
         """Test sheet retrieval by name across all datasets."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
         sheet_id = sheet_data['id']
 
@@ -566,7 +579,7 @@ class TestProjectService:
     def test_sheet_get_by_id_success(self, project_service, test_dataset_name, test_sheet_name):
         """Test successful sheet retrieval by ID."""
         # Create dataset and sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
         sheet_data = project_service.sheet_create(dataset_id, test_sheet_name)
         sheet_id = sheet_data['id']
 
@@ -586,7 +599,7 @@ class TestProjectService:
     def test_sheet_get_not_found(self, project_service, test_dataset_name):
         """Test sheet retrieval when not found."""
         # Create dataset but no sheet
-        dataset_id = project_service.ds_create(test_dataset_name)
+        dataset_id = project_service.ds_create(test_dataset_name)['id']
 
         try:
             with pytest.raises(ValueError, match="not found"):

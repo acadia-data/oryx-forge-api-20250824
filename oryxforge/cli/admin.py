@@ -275,6 +275,57 @@ def activate_dataset(dataset_id: Optional[str], dataset_name: Optional[str]):
 
 
 @admin.group()
+def mode():
+    """Project mode management commands."""
+    pass
+
+
+@mode.command('set')
+@click.argument('mode_value', type=click.Choice(['explore', 'edit', 'plan'], case_sensitive=False))
+@handle_errors
+def set_mode(mode_value: str):
+    """
+    Set the project mode.
+
+    MODE_VALUE: Project mode (explore, edit, or plan)
+
+    Examples:
+        oryxforge admin mode set explore
+        oryxforge admin mode set edit
+        oryxforge admin mode set plan
+    """
+    cli_service = CLIService()
+
+    # Validate mode using CLIService constants
+    mode_lower = mode_value.lower()
+    if mode_lower not in CLIService.VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode_value}'. Must be one of: {', '.join(sorted(CLIService.VALID_MODES))}")
+
+    cli_service.mode_set(mode_lower)
+    click.echo(f"✅ Project mode set to '{mode_lower}'")
+
+
+@mode.command('get')
+@handle_errors
+def get_mode():
+    """
+    Get the current project mode.
+
+    Example:
+        oryxforge admin mode get
+    """
+    cli_service = CLIService()
+    current_mode = cli_service.mode_get()
+
+    if current_mode:
+        click.echo(f"Current project mode: {current_mode}")
+    else:
+        click.echo("No project mode set.")
+        click.echo(f"Available modes: {', '.join(sorted(CLIService.VALID_MODES))}")
+        click.echo("Set a mode with: oryxforge admin mode set <mode>")
+
+
+@admin.group()
 def sheets():
     """Datasheet management commands."""
     pass
@@ -390,12 +441,13 @@ def show_status():
         click.echo("\nNo profile configured. Run 'oryxforge admin profile set --userid <userid> --projectid <projectid>'")
         return
 
-    # Show active dataset/sheet info
+    # Show active dataset/sheet/mode info
     cli_service = CLIService()
     active_config = cli_service.get_active()
     if active_config:
         click.echo(f"Active Dataset: {active_config.get('dataset_id', 'None')}")
         click.echo(f"Active Datasheet: {active_config.get('sheet_id', 'None')}")
+        click.echo(f"Project Mode: {active_config.get('mode', 'None')}")
 
     # Show working directory
     click.echo(f"Working Directory: {Path.cwd()}")

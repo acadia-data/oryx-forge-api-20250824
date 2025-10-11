@@ -230,13 +230,13 @@ Activate a dataset for the current project:
 
 ```bash
 # By dataset ID
-oryxforge admin dataset activate --id def456
+oryxforge admin datasets activate --id def456
 
 # By dataset name
-oryxforge admin dataset activate --name scratchpad
+oryxforge admin datasets activate --name Exploration
 
 # Interactive mode - shows dataset selection
-oryxforge admin dataset activate
+oryxforge admin datasets activate
 ```
 
 If neither `--id` nor `--name` is provided, an interactive selection menu is shown.
@@ -249,13 +249,13 @@ Activate a datasheet (also called "sheet"):
 
 ```bash
 # By datasheet ID
-oryxforge admin sheet activate --id ghi789
+oryxforge admin sheets activate --id ghi789
 
 # By datasheet name
-oryxforge admin sheet activate --name data
+oryxforge admin sheets activate --name data
 
 # Interactive mode - shows datasheet selection
-oryxforge admin sheet activate
+oryxforge admin sheets activate
 ```
 
 Interactive mode shows datasheets from the currently active dataset, or all datasheets in the project if no dataset is active.
@@ -384,10 +384,10 @@ oryxforge admin status
 oryxforge admin mode set explore
 
 # Switch to different dataset
-oryxforge admin dataset activate --name view
+oryxforge admin datasets activate --name view
 
 # Switch to different datasheet
-oryxforge admin sheet activate --name results
+oryxforge admin sheets activate --name results
 
 # Verify changes
 oryxforge admin status
@@ -407,8 +407,8 @@ oryxforge admin status
 
 # 4. The file is now available as a datasheet in the "Sources" dataset
 # You can activate it and work with it
-oryxforge admin dataset activate --name Sources
-oryxforge admin sheet activate --name customer_data.csv
+oryxforge admin datasets activate --name Sources
+oryxforge admin sheets activate --name customer_data.csv
 ```
 
 ## Troubleshooting

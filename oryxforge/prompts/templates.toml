@@ -187,9 +187,14 @@ Return a JSON object with:
 4. **is_new**:
    - true if creating a NEW sheet (generate a descriptive name based on user intent)
    - false if editing EXISTING sheet
-5. **name_python**: Use the Python-safe names from the available datasets/sheets above
-6. **Default behavior**: If no specific dataset mentioned, use active dataset/sheet as appropriate
-7. **CRITICAL - Use EXACT name_python values (NOT display names)**:
+5. **Sheet naming for NEW sheets (when is_new=true)**:
+   - Generate a descriptive, user-facing name like an Excel tab (2-4 words)
+   - Make it specific to the analysis task (e.g., "HPI Top 10 Rows", "Sales by Region", "Outlier Analysis")
+   - Use title case and underscores or spaces (e.g., "Customer_Churn_Analysis" or "Revenue Trends")
+   - DO NOT use generic names like "Data", "Output", "Results", "Analysis"
+6. **name_python for EXISTING resources**: Use the exact Python-safe names from the available datasets/sheets above
+7. **Default behavior**: If no specific dataset mentioned, use active dataset/sheet as appropriate
+8. **CRITICAL - Use EXACT name_python values (NOT display names)**:
    - You MUST use the EXACT name_python values from the "Available Datasets" and "Available Sheets" lists above
    - ALWAYS use the value shown after "Python:" in the lists - this is the name_python
    - DO NOT use the display name (shown after "Name:") - use ONLY the Python name

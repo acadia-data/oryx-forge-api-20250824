@@ -113,7 +113,8 @@ class ClaudeAgent:
     @staticmethod
     def query_run(
         query_text: str,
-        verbose: bool = True
+        verbose: bool = True,
+        session_id: Optional[str] = None
     ) -> ResultMessage:
         """
         Synchronous wrapper to run a query and get the result.
@@ -124,6 +125,7 @@ class ClaudeAgent:
         Args:
             query_text: The query/prompt to send to Claude
             verbose: If True, print execution details
+            session_id: Optional session ID to resume previous conversation
 
         Returns:
             ResultMessage containing the response details
@@ -135,7 +137,19 @@ class ClaudeAgent:
 
         async def _run():
             agent = ClaudeAgent()
-            return await agent.query(query_text, return_result=True)
+            await agent.client.connect()
+
+            # Query with session_id parameter (defaults to 'default' if None)
+            await agent.client.query(query_text, session_id=session_id or 'default')
+
+            # Get result
+            async for message in agent.client.receive_messages():
+                if isinstance(message, ResultMessage):
+                    await agent.client.disconnect()
+                    return message
+
+            await agent.client.disconnect()
+            return None
 
         start_time = time.time()
         result = asyncio.run(_run())

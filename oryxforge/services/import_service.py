@@ -2,18 +2,9 @@
 
 from pathlib import Path
 from typing import Dict, Any
-import sys
+import tomllib
 from jinja2 import Template
 from loguru import logger
-
-# Handle tomllib for Python 3.11+ or tomli for older versions
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        raise ImportError("tomli package is required for Python < 3.11. Install it with: pip install tomli")
 
 from .utils import init_supabase_client
 from .project_service import ProjectService

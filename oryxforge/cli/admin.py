@@ -240,7 +240,8 @@ def activate_dataset(dataset_id: Optional[str], dataset_name: Optional[str]):
     elif dataset_name:
         # Find dataset by name
         try:
-            dataset_id = project_service.find_dataset_by_name(dataset_name)
+            dataset = project_service.ds_get(name=dataset_name)
+            dataset_id = dataset['id']
         except ValueError as e:
             # Show available datasets
             datasets = project_service.ds_list()
@@ -386,7 +387,8 @@ def activate_sheet(sheet_id: Optional[str], sheet_name: Optional[str]):
     elif sheet_name:
         # Find sheet by name
         try:
-            sheet_id = project_service.find_sheet_by_name(sheet_name, active_dataset_id)
+            sheet = project_service.sheet_get(dataset_id=active_dataset_id, name=sheet_name)
+            sheet_id = sheet['id']
         except ValueError as e:
             # Show available sheets
             sheets = project_service.sheet_list(active_dataset_id)

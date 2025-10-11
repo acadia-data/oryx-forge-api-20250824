@@ -262,6 +262,34 @@ Interactive mode shows datasheets from the currently active dataset, or all data
 
 ## File Import
 
+### List All Datasets and Datasheets
+
+View all datasets and datasheets in the current project as a table:
+
+```bash
+oryxforge admin data list
+```
+
+Output example:
+```
+Datasets and Datasheets:
+================================================================================
+| name_dataset | name_sheet       | name_python           |
+|:-------------|:-----------------|:----------------------|
+| Sources      | HPI Master CSV   | sources.HpiMasterCsv  |
+| Sources      | Customer Data    | sources.CustomerData  |
+| Exploration  | Analysis Results | exploration.Analysis  |
+| Exploration  | Summary Stats    | exploration.Summary   |
+================================================================================
+Total: 4 datasheet(s)
+```
+
+The `name_python` column shows the combined Python notation (dataset.sheet) that can be used
+to reference sheets in code and AI agent requests.
+
+**Prerequisites:**
+- Profile must be configured with `--userid` and `--projectid`
+
 ### Import File to Sources Dataset
 
 Import a data file into your project:
@@ -462,6 +490,9 @@ oryxforge admin mode get --help
 ### Datasheet Commands
 - `oryxforge admin sheets list [--dataset-id <id>]` - List datasheets
 - `oryxforge admin sheets activate [--id <id>] [--name <name>]` - Activate datasheet
+
+### Data Commands
+- `oryxforge admin data list` - List all datasets and datasheets as a table
 
 ### Utility Commands
 - `oryxforge admin status` - Show current configuration status

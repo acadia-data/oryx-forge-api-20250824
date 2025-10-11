@@ -497,6 +497,45 @@ def import_file(filepath: str):
 
 
 @admin.group()
+def data():
+    """Data management commands."""
+    pass
+
+
+@data.command('list')
+@handle_errors
+def list_data():
+    """
+    List all datasets and datasheets in the current project.
+
+    Shows a table with dataset names, sheet names, and combined Python notation
+    (dataset.sheet) for easy reference.
+
+    Requires an active profile. Configure with:
+        oryxforge admin profile set --userid <userid> --projectid <projectid>
+
+    Example:
+        oryxforge admin data list
+    """
+    # Initialize ProjectService (reads from .oryxforge profile)
+    project_service = ProjectService()
+
+    # Get dataframe
+    df = project_service.ds_sheet_list(format='df')
+
+    if df.empty:
+        click.echo("No datasets or datasheets found in this project.")
+        return
+
+    # Print as markdown table
+    click.echo("\nDatasets and Datasheets:")
+    click.echo("=" * 80)
+    click.echo(df.to_markdown(index=False))
+    click.echo("=" * 80)
+    click.echo(f"\nTotal: {len(df)} datasheet(s)")
+
+
+@admin.group()
 def agent():
     """AI agent commands for interactive data analysis."""
     pass

@@ -49,17 +49,6 @@ class ProjectService:
         # Validate project exists and belongs to user
         self._validate_project()
 
-        # Initialize GCS filesystem for datasheet operations
-        try:
-            self.gcs = gcsfs.GCSFileSystem()
-            self.gcs_bucket = "orxy-forge-datasets-dev"
-        except Exception as e:
-            logger.warning(f"Failed to initialize GCS filesystem: {str(e)}")
-            self.gcs = None
-
-        # Initialize workflow service for name sanitization
-        self.workflow_service = WorkflowService()
-
     def _validate_project(self) -> None:
         """Validate that project exists and belongs to user."""
         try:
@@ -364,6 +353,138 @@ class ProjectService:
 
         except Exception as e:
             raise ValueError(f"Failed to list datasheets: {str(e)}")
+
+    def ds_sheet_list(self, format: str = 'df'):
+        """List all dataset-sheet combinations for the current project.
+
+        Args:
+            format: Output format - 'df' for pandas DataFrame (default), 'list' for list of dicts
+
+        Returns:
+            If format='df': pandas DataFrame with columns:
+                - name_dataset: Dataset display name
+                - name_sheet: Sheet display name
+                - name_python: Combined {dataset_name_python}.{sheet_name_python} (e.g., "sources.HpiMasterCsv")
+
+            If format='list': List of dicts with same keys
+
+        Raises:
+            ValueError: If query fails or invalid format specified
+        """
+        if format not in ['df', 'list']:
+            raise ValueError(f"Invalid format '{format}'. Must be 'df' or 'list'")
+
+        try:
+            # Query datasheets with join to datasets
+            response = (
+                self.supabase_client.table("datasheets")
+                .select("name, name_python, datasets!inner(name, name_python, project_id, user_owner)")
+                .eq("user_owner", self.user_id)
+                .eq("datasets.project_id", self.project_id)
+                .eq("datasets.user_owner", self.user_id)
+                .order("name_python")
+                .execute()
+            )
+
+            # Build result list
+            results = []
+            for row in response.data:
+                results.append({
+                    'name_dataset': row['datasets']['name'],
+                    'name_sheet': row['name'],
+                    'name_python': f"{row['datasets']['name_python']}.{row['name_python']}"
+                })
+
+            if format == 'df':
+                return pd.DataFrame(results)
+            else:
+                return results
+
+        except Exception as e:
+            raise ValueError(f"Failed to list dataset-sheet combinations: {str(e)}")
+
+    def ds_sheet_get(self, name_python: str) -> Dict[str, any]:
+        """Get dataset and sheet information from combined "dataset.sheet" notation.
+
+        Args:
+            name_python: Combined dataset.sheet name in Python notation (e.g., "sources.HpiMasterCsv")
+
+        Returns:
+            Dict with keys:
+            {
+                'dataset': {
+                    'id': '...',
+                    'name': 'Sources',
+                    'name_python': 'sources'
+                },
+                'sheet': {
+                    'id': '...',
+                    'name': 'HPI Master CSV',
+                    'name_python': 'HpiMasterCsv',
+                    'dataset_id': '...'
+                },
+                'ds_sheet_name_python': 'sources.HpiMasterCsv'  # Combined (same as input)
+            }
+
+        Raises:
+            ValueError: If invalid format, not found, or multiple matches
+        """
+        # Validate and parse input
+        if not name_python or '.' not in name_python:
+            raise ValueError(f"Invalid format: '{name_python}'. Expected 'dataset.sheet' notation (e.g., 'sources.HpiMasterCsv')")
+
+        try:
+            dataset_py, sheet_py = name_python.split('.', 1)
+        except ValueError:
+            raise ValueError(f"Invalid format: '{name_python}'. Expected 'dataset.sheet' notation")
+
+        if not dataset_py or not sheet_py:
+            raise ValueError(f"Invalid format: '{name_python}'. Both dataset and sheet names must be non-empty")
+
+        try:
+            # Query datasheets with join to datasets
+            response = (
+                self.supabase_client.table("datasheets")
+                .select("id, name, name_python, dataset_id, datasets!inner(id, name, name_python)")
+                .eq("user_owner", self.user_id)
+                .eq("name_python", sheet_py)
+                .eq("datasets.name_python", dataset_py)
+                .eq("datasets.project_id", self.project_id)
+                .eq("datasets.user_owner", self.user_id)
+                .execute()
+            )
+
+            if not response.data:
+                raise ValueError(
+                    f"Dataset-sheet combination '{name_python}' not found in this project. "
+                    f"Use project_dataset_sheets_list() to see available dataset-sheet combinations."
+                )
+
+            if len(response.data) > 1:
+                raise ValueError(f"Multiple matches found for '{name_python}'")
+
+            row = response.data[0]
+
+            # Build nested result structure
+            return {
+                'dataset': {
+                    'id': row['datasets']['id'],
+                    'name': row['datasets']['name'],
+                    'name_python': row['datasets']['name_python']
+                },
+                'sheet': {
+                    'id': row['id'],
+                    'name': row['name'],
+                    'name_python': row['name_python'],
+                    'dataset_id': row['dataset_id']
+                },
+                'ds_sheet_name_python': name_python
+            }
+
+        except Exception as e:
+            if "not found" in str(e) or "Multiple matches" in str(e) or "Invalid format" in str(e):
+                raise
+            raise ValueError(f"Failed to get dataset-sheet combination: {str(e)}")
 
     def project_init(self) -> None:
         """Initialize project by ensuring git repository exists locally.

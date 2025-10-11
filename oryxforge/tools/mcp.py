@@ -293,6 +293,70 @@ def project_get_sheet(dataset_id: Optional[str] = None, id: Optional[str] = None
     return project_service.sheet_get(dataset_id=dataset_id, id=id, name=name, name_python=name_python)
 
 
+def project_dataset_sheets_list(format: str = 'markdown') -> str:
+    """List all dataset-sheet combinations in the current project.
+
+    Returns a table showing all available datasets and their sheets with combined
+    Python notation (dataset.sheet) for easy reference.
+
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
+    Args:
+        format: Output format - 'markdown' for markdown table (default), 'plain' for plain text
+
+    Returns:
+        Markdown-formatted table with columns:
+            - name_dataset: Dataset display name
+            - name_sheet: Sheet display name
+            - name_python: Combined Python notation (e.g., "sources.HpiMasterCsv")
+
+    Example output:
+        | name_dataset | name_sheet       | name_python           |
+        |:-------------|:-----------------|:----------------------|
+        | Sources      | HPI Master CSV   | sources.HpiMasterCsv  |
+        | Exploration  | Analysis Results | exploration.Analysis  |
+    """
+    project_service = ProjectService()
+    df = project_service.ds_sheet_list(format='df')
+
+    if format == 'markdown':
+        return df.to_markdown(index=False)
+    else:
+        return str(df)
+
+
+def project_dataset_sheet_get(name_python: str) -> dict:
+    """Get dataset and sheet information from combined 'dataset.sheet' notation.
+
+    Uses profile from .oryxforge configuration to get user_id and project_id.
+
+    Args:
+        name_python: Combined dataset.sheet name in Python notation (e.g., "sources.HpiMasterCsv")
+
+    Returns:
+        Dict with keys:
+        {
+            'dataset': {
+                'id': '...',
+                'name': 'Sources',
+                'name_python': 'sources'
+            },
+            'sheet': {
+                'id': '...',
+                'name': 'HPI Master CSV',
+                'name_python': 'HpiMasterCsv',
+                'dataset_id': '...'
+            },
+            'ds_sheet_name_python': 'sources.HpiMasterCsv'  # Combined (same as input)
+        }
+
+    Raises:
+        ValueError: If invalid format, not found, or multiple matches
+    """
+    project_service = ProjectService()
+    return project_service.ds_sheet_get(name_python)
+
+
 # DataFrame analysis functions
 def df_describe(file_path: str, head_rows: int = 5, tail_rows: int = 5) -> str:
     """Generate a comprehensive analysis report for a pandas DataFrame from a file.
@@ -345,10 +409,12 @@ mcp.tool(code_upsert_run)
 mcp.tool(code_read_run)
 mcp.tool(workflow_run_eda)
 mcp.tool(workflow_run_flow)
-mcp.tool(project_create_dataset)
-mcp.tool(project_create_sheet)
+mcp.tool(project_dataset_sheets_list)
+mcp.tool(project_dataset_sheet_get)
 mcp.tool(project_list_datasets)
 mcp.tool(project_get_dataset)
 mcp.tool(project_list_sheets)
 mcp.tool(project_get_sheet)
+mcp.tool(project_create_dataset)
+mcp.tool(project_create_sheet)
 mcp.tool(df_describe)

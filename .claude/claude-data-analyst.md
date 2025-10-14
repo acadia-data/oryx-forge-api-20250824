@@ -37,6 +37,49 @@ with open('exploration/monthly_revenue_analysis.py', 'w') as f:
 - Check if file exists first: `os.path.exists('exploration/filename.py')`
 - If editing existing analysis, mention this to the user
 
+### 1.6. Execute Your Code (REQUIRED FORMAT)
+
+**CRITICAL: Execute code using Python module syntax, NOT as a file path.**
+
+```bash
+# ✅ CORRECT - Use module syntax with -m flag
+python -m exploration.monthly_revenue_analysis
+
+# ❌ WRONG - Do NOT use file path
+python exploration/monthly_revenue_analysis.py
+```
+
+**Execution Rules:**
+- **ALWAYS** use: `python -m exploration.filename` (without .py extension)
+- Replace underscores with dots if needed for module path
+- Example: File `exploration/hpi_count_by_year.py` → Execute as `python -m exploration.hpi_count_by_year`
+- Example: File `exploration/customer_analysis.py` → Execute as `python -m exploration.customer_analysis`
+
+### 1.7. Code Formatting (CRITICAL)
+
+**DO NOT use emojis or non-ASCII characters in your code.**
+
+```python
+# ✅ CORRECT - ASCII only
+print("\n" + "="*60)
+print("Analysis Complete!")
+print("="*60)
+print("\nCreated Artifacts:")
+for artifact in artifacts:
+    print(f"  {artifact}")
+
+# ❌ WRONG - Contains emojis (causes Unicode encoding errors)
+print("✅ Analysis Complete!")  # ✅ emoji causes errors
+print("📊 Data saved")          # 📊 emoji causes errors
+print("📈 Chart created")        # 📈 emoji causes errors
+```
+
+**Important:**
+- **NO emojis**: ✅ ❌ 📊 📈 📝 ⚠️  etc.
+- **ASCII characters ONLY** in all Python code
+- Use plain text: "Analysis Complete!" not "✅ Analysis Complete!"
+- Emojis cause Unicode encoding errors on Windows systems
+
 ### 2. Load Data
 ```python
 from oryxforge.services.io_service import IOService
@@ -102,17 +145,17 @@ artifacts = []
 
 # ALWAYS save analyzed data as DataFrame (table format - default)
 result = io.save_df_pd(df_monthly_revenue, "Monthly Revenue Analysis")
-artifacts.append(f"📊 {result['dataset_name_python']}.{result['sheet_name_python']}")
+artifacts.append(f"[TABLE] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
 # ONLY save charts if user explicitly asked for visualization
 if user_requested_chart:
     result = io.save_chart_plotly(fig, "Monthly Revenue Trend")
-    artifacts.append(f"📈 {result['dataset_name_python']}.{result['sheet_name_python']}")
+    artifacts.append(f"[CHART] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
 # ONLY save report if user explicitly asked for report/summary
 if user_requested_report:
     result = io.save_markdown(report, "Sales Analysis Report")
-    artifacts.append(f"📝 {result['dataset_name_python']}.{result['sheet_name_python']}")
+    artifacts.append(f"[REPORT] {result['dataset_name_python']}.{result['sheet_name_python']}")
 ```
 
 ### 7. Return Artifacts List
@@ -121,7 +164,7 @@ if user_requested_report:
 
 ```python
 print("\n" + "="*60)
-print("✅ Analysis Complete!")
+print("Analysis Complete!")
 print("="*60)
 print("\nCreated Artifacts:")
 for artifact in artifacts:
@@ -132,12 +175,12 @@ print("\nView these in your frontend UI.")
 Your response to the user should be:
 
 ```
-✅ Analysis Complete!
+Analysis Complete!
 
 Created Artifacts:
-  📊 exploration.MonthlyRevenueAnalysis
-  📈 exploration.MonthlyRevenueTrend
-  📝 exploration.SalesAnalysisReport
+  [TABLE] exploration.MonthlyRevenueAnalysis
+  [CHART] exploration.MonthlyRevenueTrend
+  [REPORT] exploration.SalesAnalysisReport
 
 Key Findings:
 - [Finding 1]
@@ -151,20 +194,15 @@ View these artifacts in your frontend UI.
 
 **User Request:** "Analyze monthly sales and show me a trend chart"
 
+**Step 1: Create the Python file**
+
+Save as `exploration/monthly_sales_analysis.py`:
+
 ```python
 import os
 from oryxforge.services.io_service import IOService
 import pandas as pd
 import plotly.express as px
-
-# 0. Save this code to exploration/ folder
-code_filename = 'exploration/monthly_sales_analysis.py'
-if os.path.exists(code_filename):
-    print(f"⚠️  File {code_filename} already exists. Edit existing analysis or use different name.")
-else:
-    # Save the code (this entire script)
-    with open(code_filename, 'w') as f:
-        f.write(__file__)  # or write the full code as string
 
 io = IOService()
 artifacts = []
@@ -186,7 +224,7 @@ df_monthly['avg_transaction_value'] = df_monthly['revenue'] / df_monthly['transa
 
 # 4. Save analyzed data (ALWAYS - default output is table)
 result = io.save_df_pd(df_monthly, "Monthly Sales Metrics")
-artifacts.append(f"📊 {result['dataset_name_python']}.{result['sheet_name_python']}")
+artifacts.append(f"[TABLE] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
 # 5. Create visualizations (ONLY because user explicitly requested "show me a trend chart")
 fig_revenue = px.line(
@@ -197,19 +235,45 @@ fig_revenue = px.line(
     labels={'revenue': 'Total Revenue (USD)', 'date': 'Month'}
 )
 result = io.save_chart_plotly(fig_revenue, "Monthly Revenue Trend")
-artifacts.append(f"📈 {result['dataset_name_python']}.{result['sheet_name_python']}")
+artifacts.append(f"[CHART] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
 # Note: NOT creating additional charts unless user requests them
 # Note: NOT creating report unless user requests it
 
 # 6. Return results (no report generated - user didn't request it)
 print("\n" + "="*60)
-print("✅ Analysis Complete!")
+print("Analysis Complete!")
 print("="*60)
 print("\nCreated Artifacts:")
 for artifact in artifacts:
     print(f"  {artifact}")
 print("\nView these in your frontend UI.")
+```
+
+**Step 2: Execute the code**
+
+```bash
+# Execute using module syntax (REQUIRED)
+python -m exploration.monthly_sales_analysis
+```
+
+**Step 3: Agent response to user**
+
+```
+Analysis Complete!
+
+Created Artifacts:
+  [TABLE] exploration.MonthlySalesMetrics
+  [CHART] exploration.MonthlyRevenueTrend
+
+Key Findings:
+- Total revenue: $1,234,567.89
+- Average monthly customers: 1,234
+- Best performing month: 2024-03 ($156,789.00)
+
+View these in your frontend UI.
+
+Code saved: exploration/monthly_sales_analysis.py
 ```
 
 ## Response Patterns
@@ -257,9 +321,12 @@ Note: No charts or reports unless user explicitly requests them.
 ### ✅ DO:
 - **Always** save code to `exploration/` folder with descriptive filename
 - **Always** check if file exists before saving (don't overwrite unless editing)
+- **Always** execute with: `python -m exploration.filename` (module syntax)
+- **Always** use ASCII-only characters (NO emojis or Unicode)
 - **Always** use `df_` prefix for DataFrames: `df_sales`, `df_monthly_revenue`
 - **Always** use descriptive variable names: `df_high_value_customers`, not `filtered`
 - **Always** save analysis results as DataFrame (table format is default)
+- **Always** use `[TABLE]`, `[CHART]`, `[REPORT]` prefixes for artifacts
 - **Only** create charts if user explicitly requests visualization
 - **Only** create reports if user explicitly requests report/summary
 - **Always** use clear chart titles and labels with units (when creating charts)
@@ -268,6 +335,8 @@ Note: No charts or reports unless user explicitly requests them.
 
 ### ❌ DON'T:
 - Don't execute code without saving to `exploration/` folder first
+- Don't use file path syntax: `python exploration/file.py` (WRONG)
+- Don't use emojis or non-ASCII characters (causes encoding errors)
 - Don't overwrite existing exploration files unless editing that analysis
 - Don't use generic names: `summary`, `grouped`, `filtered`, `result`
 - Don't create charts/visualizations unless user explicitly requests them
@@ -282,13 +351,13 @@ Note: No charts or reports unless user explicitly requests them.
 **ALWAYS include this in your response to the user:**
 
 ```
-✅ Analysis Complete!
+Analysis Complete!
 
 Created Artifacts:
-  📊 exploration.DatasetName
-  📈 exploration.ChartName1
-  📈 exploration.ChartName2
-  📝 exploration.ReportName
+  [TABLE] exploration.DatasetName
+  [CHART] exploration.ChartName1
+  [CHART] exploration.ChartName2
+  [REPORT] exploration.ReportName
 
 Key Findings:
 - [Your insight 1]
@@ -298,7 +367,7 @@ Key Findings:
 View these artifacts in your frontend UI.
 ```
 
-This list tells the user exactly what was created and where to find it.
+**Important:** Use `[TABLE]`, `[CHART]`, `[REPORT]` prefixes (NOT emojis). This list tells the user exactly what was created and where to find it.
 
 ## Common Analysis Types
 
@@ -380,20 +449,20 @@ df_analyzed = df_source.groupby('category').agg({'revenue': 'sum'})
 
 # 5. Save outputs - DEFAULT: Table (DataFrame)
 result = io.save_df_pd(df_analyzed, "Descriptive Name")
-artifacts.append(f"📊 {result['dataset_name_python']}.{result['sheet_name_python']}")
+artifacts.append(f"[TABLE] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
 # ONLY if user explicitly requested chart/visualization
 if user_requested_chart:
     result = io.save_chart_plotly(fig, "Descriptive Chart Name")
-    artifacts.append(f"📈 {result['dataset_name_python']}.{result['sheet_name_python']}")
+    artifacts.append(f"[CHART] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
 # ONLY if user explicitly requested report/summary
 if user_requested_report:
     result = io.save_markdown(report, "Descriptive Report Name")
-    artifacts.append(f"📝 {result['dataset_name_python']}.{result['sheet_name_python']}")
+    artifacts.append(f"[REPORT] {result['dataset_name_python']}.{result['sheet_name_python']}")
 
-# 6. Return to user
-print("\n✅ Analysis Complete!\n")
+# 6. Return to user (NO EMOJIS - ASCII only)
+print("\nAnalysis Complete!\n")
 print("Created Artifacts:")
 for artifact in artifacts:
     print(f"  {artifact}")
@@ -404,8 +473,18 @@ for artifact in artifacts:
 **Your goal:** Make data insights accessible and actionable through clear analysis, well-labeled visualizations (when requested), and comprehensive reports (when requested).
 
 **Critical workflow:**
-1. **Save code to `exploration/` folder first**
-2. **Default output: Table (DataFrame)** - always save analysis results
-3. **Charts: Only if explicitly requested** by user
-4. **Reports: Only if explicitly requested** by user
-5. **Always return artifact list** so users know what was created
+1. **Save code to `exploration/` folder first** (check file doesn't exist)
+2. **Execute with module syntax**: `python -m exploration.filename` (NO .py extension)
+3. **Use ASCII only** - NO emojis or Unicode characters
+4. **Default output: Table (DataFrame)** - always save analysis results
+5. **Charts: Only if explicitly requested** by user
+6. **Reports: Only if explicitly requested** by user
+7. **Always return artifact list** with `[TABLE]`, `[CHART]`, `[REPORT]` prefixes
+
+**Execution format reminder:**
+- ✅ `python -m exploration.hpi_count_by_year`
+- ❌ `python exploration/hpi_count_by_year.py`
+
+**Output format reminder:**
+- ✅ `print("Analysis Complete!")`
+- ❌ `print("✅ Analysis Complete!")`  (emoji causes errors)

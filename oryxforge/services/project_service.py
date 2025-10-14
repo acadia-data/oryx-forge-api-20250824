@@ -2,8 +2,13 @@
 
 import os
 import subprocess
+import sys
+import platform
+import ctypes
+import shutil
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
+import time
 import pandas as pd
 import gcsfs
 from supabase import Client
@@ -12,6 +17,7 @@ from .workflow_service import WorkflowService
 from .repo_service import RepoService
 from .utils import init_supabase_client
 from .iam import CredentialsManager
+from .config_service import ConfigService
 
 
 class ProjectService:
@@ -19,7 +25,7 @@ class ProjectService:
     Service class for project-level operations including datasets, datasheets, and git operations.
     """
 
-    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None):
+    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None, mount_point: Optional[str] = None, mount_ensure: bool = True):
         """
         Initialize project service.
 
@@ -29,10 +35,15 @@ class ProjectService:
             project_id: Project ID (if None, read from profile)
             user_id: User ID (if None, read from profile)
             working_dir: Working directory for CredentialsManager (if None, use current directory)
+            mount_point: Mount point for rclone data directory (if None, read from config, then default to "./data")
+            mount_ensure: Whether to automatically ensure mount on initialization (default: True)
 
         Raises:
             ValueError: If project doesn't exist or profile is not configured
         """
+        # Store working_dir for config access
+        self.working_dir = working_dir or str(Path.cwd())
+
         # Get profile from CredentialsManager if not provided
         if project_id is None or user_id is None:
             creds_manager = CredentialsManager(working_dir=working_dir)
@@ -43,11 +54,46 @@ class ProjectService:
             self.project_id = project_id
             self.user_id = user_id
 
+        # Resolve mount point: parameter > config > default
+        if mount_point is None:
+            # Try to get from config
+            config_service = ConfigService(working_dir=self.working_dir)
+            saved_mount = config_service.get('active', 'mount_point')
+            if saved_mount:
+                # Convert from POSIX format to native Path
+                mount_point = str(Path(saved_mount))
+                logger.debug(f"Using mount point from config: {mount_point}")
+            else:
+                # Use default
+                mount_point = "./data"
+                logger.debug("Using default mount point: ./data")
+
+        # Store mount point
+        self.mount_point = mount_point
+
         # Initialize Supabase client
         self.supabase_client = init_supabase_client()
 
         # Validate project exists and belongs to user
         self._validate_project()
+
+        # Ensure data is mounted if requested
+        if mount_ensure:
+            self.ensure_mount()
+
+    @property
+    def mount_point_path(self) -> Path:
+        """
+        Get mount point as a Path object for easy path manipulation.
+
+        Returns:
+            Path: Mount point as pathlib Path object
+
+        Examples:
+            >>> ps = ProjectService()
+            >>> file_path = ps.mount_point_path / "exploration" / "data.parquet"
+        """
+        return Path(self.mount_point)
 
     def _validate_project(self) -> None:
         """Validate that project exists and belongs to user."""
@@ -163,8 +209,13 @@ class ProjectService:
                 - name_python: Python-safe name (snake_case)
 
         Raises:
-            ValueError: If dataset creation fails
+            ValueError: If dataset creation fails or name is reserved
         """
+        # Check for reserved dataset names
+        reserved_names = ['preview']
+        if name.lower() in reserved_names:
+            raise ValueError(f"Dataset name '{name}' is reserved and cannot be used. Reserved names: {', '.join(reserved_names)}")
+
         try:
             response = (
                 self.supabase_client.table("datasets")
@@ -215,7 +266,7 @@ class ProjectService:
         """
         return self.ds_create(name)
 
-    def sheet_create(self, dataset_id: str, name: str, source_id: Optional[str] = None) -> Dict[str, str]:
+    def sheet_create(self, dataset_id: Optional[str] = None, name: str = None, source_id: Optional[str] = None, type: str = 'table', dataset_name_python: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         """Create a new datasheet in the specified dataset.
 
         The name will be automatically converted to a Python-safe name_python (PascalCase).
@@ -224,9 +275,12 @@ class ProjectService:
         (user_owner, dataset_id, name) already exists, returns the existing sheet data.
 
         Args:
-            dataset_id: Dataset UUID
+            dataset_id: Dataset UUID (if None, must provide dataset_name_python)
             name: Datasheet display name (e.g., 'HPI Master CSV')
             source_id: Optional UUID of data_sources entry that this sheet is imported from
+            type: Type of datasheet (default: 'table')
+            dataset_name_python: Dataset Python name (snake_case) to look up dataset_id (lower priority than dataset_id)
+            metadata: Optional dict of additional key-value pairs to store in the datasheet (e.g., {'uri': 'path/to/file', 'size': 1024})
 
         Returns:
             Dict[str, str]: Dict with keys:
@@ -236,23 +290,41 @@ class ProjectService:
                 - dataset_id: Parent dataset UUID
 
         Raises:
-            ValueError: If dataset doesn't exist
+            ValueError: If dataset doesn't exist or neither dataset_id nor dataset_name_python provided
+
+        Note:
+            Parameter priority for dataset resolution: dataset_id > dataset_name_python
         """
+        # Resolve dataset_id from dataset_name_python if needed
+        resolved_dataset_id = dataset_id
+        if not resolved_dataset_id and dataset_name_python:
+            dataset_info = self.ds_get(name_python=dataset_name_python)
+            resolved_dataset_id = dataset_info['id']
+
+        if not resolved_dataset_id:
+            raise ValueError("Either dataset_id or dataset_name_python must be provided")
+
         # Validate dataset exists and belongs to user
-        if not self.ds_exists(dataset_id):
-            raise ValueError(f"Dataset {dataset_id} not found or access denied")
+        if not self.ds_exists(resolved_dataset_id):
+            raise ValueError(f"Dataset {resolved_dataset_id} not found or access denied")
 
         try:
             # Build upsert data
             upsert_data = {
                 "name": name,
                 "user_owner": self.user_id,
-                "dataset_id": dataset_id
+                "dataset_id": resolved_dataset_id,
+                "type": type
             }
 
             # Add source_id if provided
             if source_id is not None:
                 upsert_data["source_id"] = source_id
+
+            # Add metadata fields if provided
+            if metadata is not None:
+                for key, value in metadata.items():
+                    upsert_data[key] = value
 
             response = (
                 self.supabase_client.table("datasheets")
@@ -445,7 +517,7 @@ class ProjectService:
             # Query datasheets with join to datasets
             response = (
                 self.supabase_client.table("datasheets")
-                .select("id, name, name_python, dataset_id, datasets!inner(id, name, name_python)")
+                .select("id, name, name_python, dataset_id, uri, datasets!inner(id, name, name_python)")
                 .eq("user_owner", self.user_id)
                 .eq("name_python", sheet_py)
                 .eq("datasets.name_python", dataset_py)
@@ -476,7 +548,8 @@ class ProjectService:
                     'id': row['id'],
                     'name': row['name'],
                     'name_python': row['name_python'],
-                    'dataset_id': row['dataset_id']
+                    'dataset_id': row['dataset_id'],
+                    'uri': row.get('uri')
                 },
                 'ds_sheet_name_python': name_python
             }
@@ -810,4 +883,254 @@ class ProjectService:
             if "not found" in str(e) or "Multiple datasheets" in str(e) or "No datasets found" in str(e):
                 raise
             raise ValueError(f"Failed to get datasheet: {str(e)}")
+
+    def is_mounted(self) -> bool:
+        """
+        Check if mount point is mounted using rclone.
+
+        Returns:
+            bool: True if mounted, False otherwise
+
+        Examples:
+            >>> project_service = ProjectService()
+            >>> if project_service.is_mounted():
+            ...     print("Data directory is mounted")
+        """
+        # First check if path exists
+        if not os.path.exists(self.mount_point):
+            return False
+
+        if sys.platform != 'win32':
+            return os.path.ismount(self.mount_point)
+
+        try:
+            # Windows file attributes
+            FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+            INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
+
+            # Get file attributes
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(self.mount_point)
+
+            # If attributes are invalid, path doesn't exist or can't be accessed
+            if attrs == INVALID_FILE_ATTRIBUTES:
+                return False
+
+            # Check if it has reparse point attribute (mount/junction)
+            is_reparse = bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+
+            return is_reparse
+
+        except Exception as e:
+            logger.debug(f"Error checking mount status: {str(e)}")
+            return False
+
+    def mount(self) -> bool:
+        """
+        Mount the project data directory using rclone.
+
+        Mounts the GCS bucket path: oryx-forge-gcs:orxy-forge-datasets-dev/{user_id}/{project_id}
+        to the configured mount point using rclone with VFS caching.
+
+        Returns:
+            bool: True if mount succeeded, False otherwise
+
+        Raises:
+            None: Logs errors but doesn't raise exceptions
+
+        Examples:
+            >>> project_service = ProjectService()
+            >>> if project_service.mount():
+            ...     print("Successfully mounted data directory")
+        """
+        # Check if already mounted
+        if self.is_mounted():
+            logger.info(f"Mount point {self.mount_point} is already mounted")
+            return True
+
+        # Check that mount point does NOT exist (regardless of platform)
+        if os.path.exists(self.mount_point):
+            logger.error(f"Mount point {self.mount_point} already exists, unable to mount here")
+            return False
+
+        # Construct GCS path
+        gcs_path = f"oryx-forge-gcs:orxy-forge-datasets-dev/{self.user_id}/{self.project_id}"
+
+        if sys.platform == 'win32':
+            # Windows-specific mounting using PowerShell
+            # Use Start-Process with -PassThru and immediately exit, don't wait for rclone
+            ps_cmd = f'''Start-Process -FilePath "rclone" -ArgumentList "mount","{gcs_path}","{self.mount_point}","--vfs-cache-mode","writes","--vfs-cache-max-age","24h","--log-file",".rclone.log" -WindowStyle Hidden -PassThru | Out-Null'''
+
+            try:
+                logger.info(f"Mounting {gcs_path} to {self.mount_point}...")
+                result = subprocess.run(
+                    ['powershell', '-Command', ps_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+
+                if result.returncode != 0:
+                    logger.error(f"PowerShell mount command failed: {result.stderr}")
+                    return False
+
+                # Wait for mount to initialize
+                time.sleep(5)
+
+                # Verify mount succeeded by checking if directory now exists
+                if os.path.exists(self.mount_point):
+                    logger.success(f"Successfully mounted {self.mount_point}")
+                    return True
+                else:
+                    logger.error(f"Mount failed: directory {self.mount_point} does not exist after mount")
+                    logger.error(f"Command: {ps_cmd}")
+                    logger.error(f"Check .rclone.log for error details")
+                    return False
+
+            except subprocess.TimeoutExpired:
+                logger.error("rclone mount command timed out")
+                return False
+            except FileNotFoundError:
+                logger.error("PowerShell or rclone command not found")
+                return False
+            except Exception as e:
+                logger.error(f"Error mounting directory: {str(e)}")
+                return False
+
+        else:
+            # Linux/macOS: Use standard daemon mode
+            cmd = [
+                'rclone', 'mount',
+                gcs_path,
+                self.mount_point,
+                '--vfs-cache-mode', 'writes',
+                '--vfs-cache-max-age', '24h',
+                '--daemon'
+            ]
+
+            try:
+                logger.info(f"Mounting {gcs_path} to {self.mount_point}...")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if result.returncode != 0:
+                    logger.error(f"rclone mount failed: {result.stderr}")
+                    return False
+
+                # Wait for daemon to initialize
+                time.sleep(2)
+
+                # Verify mount succeeded
+                if self.is_mounted():
+                    logger.success(f"Successfully mounted {self.mount_point}")
+                    return True
+                else:
+                    logger.error(f"Mount command succeeded but directory is not mounted")
+                    return False
+
+            except subprocess.TimeoutExpired:
+                logger.error("rclone mount command timed out")
+                return False
+            except FileNotFoundError:
+                logger.error("rclone command not found. Please ensure rclone is installed and in your PATH")
+                return False
+            except Exception as e:
+                logger.error(f"Error mounting directory: {str(e)}")
+                return False
+
+    def unmount(self, forced:bool = False) -> bool:
+        """
+        Unmount the project data directory.
+
+        Uses platform-specific unmount commands:
+        - Windows: taskkill /F /IM rclone.exe
+        - Linux: fusermount -u
+        - macOS: umount
+
+        Returns:
+            bool: True if unmount succeeded, False otherwise
+
+        Examples:
+            >>> project_service = ProjectService()
+            >>> if project_service.unmount():
+            ...     print("Successfully unmounted data directory")
+        """
+        # Check if already unmounted
+        if not forced and not self.is_mounted():
+            logger.info(f"Mount point {self.mount_point} is not mounted")
+            return True
+
+        system = platform.system()
+
+        try:
+            if system == "Windows":
+                # Windows: Kill all rclone processes
+                cmd = ['taskkill', '/F', '/IM', 'rclone.exe']
+            elif system == "Linux":
+                cmd = ['fusermount', '-u', self.mount_point]
+            elif system == "Darwin":  # macOS
+                cmd = ['umount', self.mount_point]
+            else:
+                logger.error(f"Unsupported platform: {system}")
+                return False
+
+            logger.info(f"Unmounting {self.mount_point}...")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                logger.success(f"Successfully unmounted {self.mount_point}")
+                return True
+            else:
+                # On Windows, taskkill returns error if no process found, which is OK
+                if system == "Windows" and "not found" in result.stderr.lower():
+                    logger.info(f"No rclone process found (already unmounted)")
+                    return True
+                logger.error(f"Unmount failed: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            logger.error("Unmount command timed out")
+            return False
+        except FileNotFoundError:
+            logger.error(f"Unmount command not found for platform: {system}")
+            return False
+        except Exception as e:
+            logger.error(f"Error unmounting directory: {str(e)}")
+            return False
+
+    def ensure_mount(self) -> None:
+        """
+        Ensure the data directory is mounted, mounting if necessary.
+
+        Checks if the mount point is already mounted. If not, attempts to mount it.
+        Raises an error if mounting fails.
+
+        Raises:
+            ValueError: If mount fails
+
+        Examples:
+            >>> project_service = ProjectService()
+            >>> project_service.ensure_mount()  # Ensures data directory is accessible
+        """
+        if not self.is_mounted():
+            logger.info(f"Data directory not mounted, attempting to mount...")
+            if not self.mount():
+                raise ValueError(
+                    f"Failed to mount data directory at {self.mount_point}. "
+                    f"Please check that rclone is installed and configured correctly."
+                )
+
+        import d6tflow
+        d6tflow.set_dir(self.mount_point)
+
+        logger.success(f"Data directory mounted and initialized successfully at {self.mount_point}")
+
 

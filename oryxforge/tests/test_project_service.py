@@ -354,20 +354,14 @@ class TestProjectService:
         assert result == sheet_id
 
     def test_get_first_sheet_id_no_sheets(self, project_service, test_dataset_name):
-        """Test first sheet retrieval - datasets now come with default 'data' sheet."""
-        # Create dataset (comes with default "data" sheet)
+        """Test first sheet retrieval when dataset has no sheets."""
+        # Create dataset (no longer comes with default sheet after trigger removal)
         dataset_id = project_service.ds_create(test_dataset_name)['id']
         self.track_dataset(dataset_id)
 
-        # Should return the default sheet, not raise an error
-        result = project_service.get_first_sheet_id(dataset_id)
-        assert result is not None
-        assert isinstance(result, str)
-
-        # Track the default sheet for cleanup
-        sheets = project_service.sheet_list(dataset_id)
-        for sheet in sheets:
-            self.track_sheet(sheet['id'])
+        # Should raise ValueError when no sheets exist
+        with pytest.raises(ValueError, match="No datasheets found in dataset"):
+            project_service.get_first_sheet_id(dataset_id)
 
     def test_interactive_dataset_select_success(self, project_service, test_dataset_name):
         """Test successful interactive dataset selection."""

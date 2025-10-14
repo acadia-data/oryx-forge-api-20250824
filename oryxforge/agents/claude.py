@@ -4,6 +4,7 @@ import asyncio
 import sys
 from typing import Optional, AsyncIterator
 from claude_agent_sdk import ClaudeSDKClient, ResultMessage, ClaudeAgentOptions
+from loguru import logger
 
 # Fix Windows console encoding for unicode characters
 if sys.platform == 'win32':
@@ -68,7 +69,7 @@ class ClaudeAgent:
             if return_result:
                 # Iterate through messages until we get the ResultMessage
                 async for message in self.client.receive_messages():
-                    print(message)
+                    logger.info(str(message))
                     if isinstance(message, ResultMessage):
                         return message
                 return None
@@ -76,7 +77,7 @@ class ClaudeAgent:
                 return None
 
         except Exception as e:
-            print(f"Error during query execution: {e}")
+            logger.error(f"Error during query execution: {e}")
             raise
         finally:
             await self.client.disconnect()
@@ -105,7 +106,7 @@ class ClaudeAgent:
                 yield message
 
         except Exception as e:
-            print(f"Error during query execution: {e}")
+            logger.error(f"Error during query execution: {e}")
             raise
         finally:
             await self.client.disconnect()
@@ -144,6 +145,7 @@ class ClaudeAgent:
 
             # Get result
             async for message in agent.client.receive_messages():
+                logger.info(str(message))
                 if isinstance(message, ResultMessage):
                     await agent.client.disconnect()
                     return message
@@ -156,9 +158,9 @@ class ClaudeAgent:
         execution_time = time.time() - start_time
 
         if verbose and result:
-            print(f"Result: {result.result}")
-            print(f"Cost: ${result.total_cost_usd}")
-            print(f"Duration: {result.duration_ms}ms")
-            print(f"Execution time: {execution_time:.2f}s")
+            logger.info(f"Result: {result.result}")
+            logger.info(f"Cost: ${result.total_cost_usd}")
+            logger.info(f"Duration: {result.duration_ms}ms")
+            logger.info(f"Execution time: {execution_time:.2f}s")
 
         return result

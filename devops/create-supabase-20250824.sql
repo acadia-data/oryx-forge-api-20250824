@@ -55,8 +55,8 @@ UNIQUE (user_owner, datasheet_id);
 CREATE OR REPLACE FUNCTION create_default_datasheet()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO datasheets (name, user_owner, dataset_id, created_at, updated_at)
-    VALUES ('data', NEW.user_owner, NEW.id, now(), now());
+    INSERT INTO datasheets (name, user_owner, dataset_id, type, created_at, updated_at)
+    VALUES ('data', NEW.user_owner, NEW.id, 'table', now(), now());
 
     RETURN NEW;
 END;

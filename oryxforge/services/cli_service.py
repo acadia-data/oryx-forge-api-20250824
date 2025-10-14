@@ -3,13 +3,13 @@
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from configobj import ConfigObj
 from supabase import Client
 from loguru import logger
 from .utils import init_supabase_client
 from .repo_service import RepoService
 from .project_service import ProjectService
 from .iam import CredentialsManager
+from .config_service import ConfigService
 
 
 class CLIService:
@@ -29,6 +29,9 @@ class CLIService:
             cwd: Working directory (if None, use current directory)
         """
         self.cwd = Path(cwd) if cwd else Path.cwd()
+
+        # Initialize ConfigService
+        self.config_service = ConfigService(working_dir=str(self.cwd))
 
         # Initialize user_id
         if user_id:
@@ -57,11 +60,6 @@ class CLIService:
                 raise ValueError(f"User ID {self.user_id} not found in database")
         except Exception as e:
             raise ValueError(f"Failed to validate user ID {self.user_id}: {str(e)}")
-
-    @property
-    def project_config_file(self) -> Path:
-        """Get project-specific configuration file path."""
-        return self.cwd / '.oryxforge.cfg'
 
     def projects_create(self, name: str, setup_repo: bool = True) -> str:
         """
@@ -120,57 +118,6 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to list projects: {str(e)}")
 
-    def _load_config(self) -> ConfigObj:
-        """
-        Load project configuration file.
-
-        Returns:
-            ConfigObj: Configuration object
-        """
-        config = ConfigObj()
-        if self.project_config_file.exists():
-            config = ConfigObj(str(self.project_config_file))
-        return config
-
-    def _save_config(self, config: ConfigObj) -> None:
-        """
-        Save project configuration file.
-
-        Args:
-            config: Configuration object to save
-        """
-        config.filename = str(self.project_config_file)
-        config.write()
-
-    def _config_update(self, key: str, value: str) -> None:
-        """
-        Update a key in the 'active' section of project configuration.
-
-        Args:
-            key: Configuration key to update
-            value: Configuration value to set
-        """
-        config = self._load_config()
-        if 'active' not in config:
-            config['active'] = {}
-        config['active'][key] = value
-        self._save_config(config)
-
-    def _config_get(self, key: str) -> Optional[str]:
-        """
-        Get a value from the 'active' section of project configuration.
-
-        Args:
-            key: Configuration key to retrieve
-
-        Returns:
-            Optional[str]: Configuration value or None if not found
-        """
-        if not self.project_config_file.exists():
-            return None
-        config = self._load_config()
-        active_section = config.get('active', {})
-        return active_section.get(key)
 
     def project_activate(self, project_id: str) -> None:
         """
@@ -215,8 +162,8 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to validate dataset: {str(e)}")
 
-        # Update config using helper
-        self._config_update('dataset_id', dataset_id)
+        # Update config using ConfigService
+        self.config_service.set('active', 'dataset_id', dataset_id)
 
         logger.success(f"Activated dataset {dataset_id}")
 
@@ -244,8 +191,8 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to validate datasheet: {str(e)}")
 
-        # Update config using helper
-        self._config_update('sheet_id', sheet_id)
+        # Update config using ConfigService
+        self.config_service.set('active', 'sheet_id', sheet_id)
 
         logger.success(f"Activated datasheet {sheet_id}")
 
@@ -267,15 +214,14 @@ class CLIService:
         # Also get dataset, sheet, and mode from config if exists
         result = {'user_id': profile['user_id'], 'project_id': profile['project_id']}
 
-        if self.project_config_file.exists():
-            config = self._load_config()
-            active_section = config.get('active', {})
-            if 'dataset_id' in active_section:
-                result['dataset_id'] = active_section['dataset_id']
-            if 'sheet_id' in active_section:
-                result['sheet_id'] = active_section['sheet_id']
-            if 'mode' in active_section:
-                result['mode'] = active_section['mode']
+        # Get additional active settings from ConfigService
+        active_section = self.config_service.get_all('active')
+        if 'dataset_id' in active_section:
+            result['dataset_id'] = active_section['dataset_id']
+        if 'sheet_id' in active_section:
+            result['sheet_id'] = active_section['sheet_id']
+        if 'mode' in active_section:
+            result['mode'] = active_section['mode']
 
         return result
 
@@ -294,7 +240,7 @@ class CLIService:
                 f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(self.VALID_MODES))}"
             )
 
-        self._config_update('mode', mode)
+        self.config_service.set('active', 'mode', mode)
         logger.success(f"Project mode set to '{mode}'")
 
     def mode_get(self) -> Optional[str]:
@@ -304,7 +250,73 @@ class CLIService:
         Returns:
             Optional[str]: Current mode or None if not set
         """
-        return self._config_get('mode')
+        return self.config_service.get('active', 'mode')
+
+    def mount_point_set(self, mount_point: str) -> None:
+        """
+        Set the mount point for the project data directory.
+
+        Args:
+            mount_point: Path to use as mount point (must be absolute path)
+
+        Raises:
+            ValueError: If mount point format is invalid
+        """
+        # Validate and normalize path
+        path = self.config_service.validate_mount_point(mount_point)
+
+        # Store as POSIX format for cross-platform compatibility
+        self.config_service.set('active', 'mount_point', path.as_posix())
+
+        logger.success(f"Mount point set to '{path.as_posix()}'")
+
+    def mount_point_get(self) -> Optional[str]:
+        """
+        Get the configured mount point.
+
+        Returns:
+            Optional[str]: Mount point path in POSIX format, or None if not set
+        """
+        return self.config_service.get('active', 'mount_point')
+
+    def mount_point_suggest(self, base_path: str) -> str:
+        """
+        Suggest a mount point with user/project hierarchy.
+
+        Takes a base path and appends /{user_id}/{project_id}/data to create
+        a project-specific mount point directory.
+
+        Args:
+            base_path: Base directory path (e.g., 'D:\\data\\oryx-forge')
+
+        Returns:
+            str: Suggested mount point path in POSIX format
+
+        Raises:
+            ValueError: If no profile is configured or path validation fails
+
+        Example:
+            >>> cli_service.mount_point_suggest("D:\\data\\oryx-forge")
+            'D:/data/oryx-forge/550e8400-e29b-41d4-a716-446655440000/abc123-project-id/data'
+        """
+        # Get profile (both user_id and project_id)
+        active = self.get_active()
+
+        # Validate profile is configured
+        if not active or 'user_id' not in active or 'project_id' not in active:
+            raise ValueError(
+                "No profile configured. Run 'oryxforge admin profile set --userid <id> --projectid <id>' first."
+            )
+
+        user_id = active['user_id']
+        project_id = active['project_id']
+
+        # Build suggested path: base_path/user_id/project_id/data
+        suggested_path = Path(base_path) / user_id / project_id / "data"
+
+        # Validate and return as POSIX
+        validated_path = self.config_service.validate_mount_point(str(suggested_path))
+        return validated_path.as_posix()
 
     def interactive_project_select(self) -> str:
         """

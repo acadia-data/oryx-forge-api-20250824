@@ -332,6 +332,198 @@ The import automatically handles:
 - Missing value handling
 - For Excel files: Removes empty rows/columns, detects headers and footers
 
+## Configuration Management
+
+### Set Mount Point
+
+Configure a custom mount point for your project's data directory:
+
+```bash
+# Windows
+oryxforge admin config mount-set "D:\data"
+
+# Linux/macOS
+oryxforge admin config mount-set "/mnt/data"
+```
+
+The mount point configuration:
+- Saves the mount point path in project configuration (`.oryxforge.cfg`)
+- Automatically used by all services that need to access the data directory
+- Stored in cross-platform POSIX format for compatibility
+- Must be an absolute path
+
+**Path Requirements:**
+- **Windows:** Must be absolute with drive letter (e.g., `D:\data`) or UNC path (e.g., `\\server\share`)
+- **Linux/macOS:** Must be an absolute path (e.g., `/mnt/data`)
+
+**Example:**
+```bash
+# Set custom mount point
+oryxforge admin config mount-set "D:\oryx-data"
+
+# Verify configuration
+oryxforge admin config mount-get
+```
+
+### Get Mount Point
+
+View the configured mount point:
+
+```bash
+oryxforge admin config mount-get
+```
+
+Output example:
+```
+Current mount point: D:/oryx-data
+```
+
+If no mount point is configured:
+```
+No mount point configured. Using default: ./data
+Set a mount point with: oryxforge admin config mount-set <path>
+```
+
+### Suggest Mount Point with Project Hierarchy
+
+Automatically generate a mount point path with organized user/project hierarchy:
+
+```bash
+# Windows
+oryxforge admin config mount-suggest "D:\data\oryx-forge"
+
+# Linux/macOS
+oryxforge admin config mount-suggest "/mnt/oryx-forge"
+```
+
+**What it does:**
+- Takes your base path (e.g., `D:\data\oryx-forge`)
+- Automatically appends `/{user_id}/{project_id}/data`
+- Creates parent directories automatically when setting the mount point
+- Creates an organized hierarchy for multiple projects
+- Outputs in cross-platform POSIX format
+- Optionally mounts the data directory immediately
+
+**Example workflow:**
+```bash
+$ oryxforge admin config mount-suggest "D:\data\oryx-forge"
+Suggested mount point: D:/data/oryx-forge/{user-id}/{project-id}/data
+
+Do you want to set this as your mount point? [Y/n]: y
+Created directory: D:\data\oryx-forge\{user-id}\{project-id}
+✅ Mount point set to: D:/data/oryx-forge/{user-id}/{project-id}/data
+
+Do you want to mount the data directory now? [Y/n]: y
+✅ Successfully mounted data directory at D:/data/oryx-forge/{user-id}/{project-id}/data
+```
+
+**Directory structure created:**
+```
+D:\data\oryx-forge\
+└── {user-id}\
+    ├── {project-id-1}\
+    │   └── data\              (mount point for project 1)
+    └── {project-id-2}\
+        └── data\              (mount point for project 2)
+```
+
+**Benefits:**
+- **Organized**: Automatic hierarchy prevents path conflicts
+- **Multi-project**: Easy to manage multiple projects on same machine
+- **No manual IDs**: Don't need to type or remember user/project IDs
+- **Cross-platform**: Works on Windows, Linux, and macOS
+
+**Prerequisites:**
+- Profile must be configured with `oryxforge admin profile set --userid <id> --projectid <id>`
+
+## Data Mount Management
+
+### Mount Project Data Directory
+
+Mount the project's GCS bucket to the configured mount point using rclone:
+
+```bash
+oryxforge admin mount
+```
+
+The mount command:
+- Mounts to the configured mount point (or `./data` if not configured)
+- Makes your project's cloud storage accessible as a local filesystem
+- Runs in the background for seamless access
+- Provides fast read/write performance with intelligent caching
+
+**Prerequisites:**
+- Profile must be configured with `--userid` and `--projectid`
+- [rclone](https://rclone.org/downloads/) must be installed and configured with your cloud storage
+- (Optional) Mount point configured with `oryxforge admin config mount-set <path>`
+
+**Platform Support:**
+- Windows, Linux, and macOS
+
+**Example workflow:**
+```bash
+# 1. Set profile (one-time setup)
+oryxforge admin profile set --userid "your-user-id" --projectid "your-project-id"
+
+# 2. (Optional) Configure custom mount point
+oryxforge admin config mount-set "D:\oryx-data"
+
+# 3. Mount the data directory
+oryxforge admin mount
+
+# 4. Access your data files
+ls D:\oryx-data
+cat D:\oryx-data\myfile.csv
+
+# 5. Write files to the mount
+cp local-file.csv D:\oryx-data\
+```
+
+### Unmount Project Data Directory
+
+Unmount the rclone-mounted data directory:
+
+```bash
+oryxforge admin unmount
+```
+
+The unmount command:
+- Safely unmounts the data directory
+- Ensures all cached writes are flushed to cloud storage
+
+**Prerequisites:**
+- Profile must be configured
+- Data directory must be currently mounted
+
+**Example:**
+```bash
+# Unmount when done working
+oryxforge admin unmount
+```
+
+### Troubleshooting Mount Issues
+
+**"rclone command not found"**
+- Install rclone from https://rclone.org/downloads/
+- Ensure rclone is in your system PATH
+
+**"Mount failed" or "Access denied"**
+- Verify rclone is configured with your cloud storage credentials
+- Check that your user has access to the project's cloud storage
+
+**Mount appears successful but directory is empty**
+- Check cloud storage permissions
+- Verify your profile is configured correctly with `oryxforge admin profile get`
+
+**Windows-specific issues**
+- Install WinFsp from https://winfsp.dev/ (required for mounting on Windows)
+
+**Linux-specific issues**
+- Install FUSE: `sudo apt-get install fuse` (Ubuntu/Debian) or `sudo yum install fuse` (CentOS/RHEL)
+
+**macOS-specific issues**
+- Install macFUSE from https://osxfuse.github.io/ (required for mounting on macOS)
+
 ## Status and Configuration
 
 ### Show Status
@@ -473,11 +665,20 @@ oryxforge admin mode get --help
 - `oryxforge admin profile get` - View current profile
 - `oryxforge admin profile clear` - Clear profile configuration
 
+### Configuration Commands
+- `oryxforge admin config mount-set <path>` - Set mount point for data directory
+- `oryxforge admin config mount-get` - Get configured mount point
+- `oryxforge admin config mount-suggest <base_path>` - Suggest mount point with user/project hierarchy
+
 ### Project Commands
 - `oryxforge admin projects list` - List all projects
 - `oryxforge admin projects create <name>` - Create new project
 - `oryxforge admin projects import <filepath>` - Import data file
 - `oryxforge admin pull [--id <id>] [--cwd <path>]` - Pull and activate project
+
+### Mount Commands
+- `oryxforge admin mount` - Mount project data directory
+- `oryxforge admin unmount` - Unmount project data directory
 
 ### Mode Commands
 - `oryxforge admin mode set <mode>` - Set project mode (explore/edit/plan)
@@ -496,5 +697,5 @@ oryxforge admin mode get --help
 
 ### Utility Commands
 - `oryxforge admin status` - Show current configuration status
-- `oryxforge admin config` - Show configuration file contents
+- `oryxforge admin show-config` - Show configuration file contents
 ```

@@ -261,6 +261,120 @@ def activate_dataset(dataset_id: Optional[str], dataset_name: Optional[str]):
 
 
 @admin.group()
+def config():
+    """Configuration management commands."""
+    pass
+
+
+@config.command('mount-set')
+@click.argument('mount_point')
+@handle_errors
+def set_mount_point(mount_point: str):
+    """
+    Set the mount point for the project data directory.
+
+    MOUNT_POINT: Absolute path to use as mount point (e.g., 'D:\\data' on Windows, '/mnt/data' on Linux)
+
+    The mount point will be saved in the project configuration and used automatically
+    when initializing ProjectService.
+
+    Examples:
+        # Windows
+        oryxforge admin config mount-set "D:\\data"
+
+        # Linux/macOS
+        oryxforge admin config mount-set "/mnt/data"
+    """
+    cli_service = CLIService()
+    cli_service.mount_point_set(mount_point)
+    click.echo(f"✅ Mount point set to: {mount_point}")
+
+
+@config.command('mount-get')
+@handle_errors
+def get_mount_point():
+    """
+    Get the configured mount point.
+
+    Example:
+        oryxforge admin config mount-get
+    """
+    cli_service = CLIService()
+    mount_point = cli_service.mount_point_get()
+
+    if mount_point:
+        click.echo(f"Current mount point: {mount_point}")
+    else:
+        click.echo("No mount point configured. Using default: ./data")
+        click.echo("Set a mount point with: oryxforge admin config mount-set <path>")
+
+
+@config.command('mount-suggest')
+@click.argument('base_path')
+@handle_errors
+def suggest_mount_point(base_path: str):
+    """
+    Suggest a mount point with user/project hierarchy.
+
+    Takes a base path and automatically appends /{user_id}/{project_id}/data
+    to create a project-specific mount point.
+
+    BASE_PATH: Base directory for mount points (e.g., 'D:\\data\\oryx-forge')
+
+    This creates an organized structure:
+    - Each user has their own subdirectory
+    - Each project has its own subdirectory under the user
+    - Data is mounted in a 'data' subdirectory
+
+    Examples:
+        # Windows - suggest path
+        oryxforge admin config mount-suggest "D:\\data\\oryx-forge"
+
+        # Linux/macOS - suggest path
+        oryxforge admin config mount-suggest "/mnt/oryx-forge"
+
+    Prerequisites:
+        - Profile must be configured with userid and projectid
+    """
+    cli_service = CLIService()
+
+    try:
+        # Get suggested path
+        suggested_path = cli_service.mount_point_suggest(base_path)
+
+        # Display suggestion
+        click.echo(f"Suggested mount point: {suggested_path}")
+
+        # Ask if user wants to set it
+        if click.confirm(f'\nDo you want to set this as your mount point?', default=True):
+            # Create parent directories
+            parent_dir = Path(suggested_path).parent
+            parent_dir.mkdir(parents=True, exist_ok=True)
+            click.echo(f"Created directory: {parent_dir}")
+
+            cli_service.mount_point_set(suggested_path)
+            click.echo(f"✅ Mount point set to: {suggested_path}")
+
+            # Ask if user wants to mount it now
+            if click.confirm(f'\nDo you want to mount the data directory now?', default=True):
+                # Initialize ProjectService with mount_ensure=False to prevent auto-mount
+                project_service = ProjectService(mount_ensure=False)
+
+                # Attempt to mount
+                if project_service.mount():
+                    click.echo(f"✅ Successfully mounted data directory at {project_service.mount_point}")
+                else:
+                    click.echo(f"❌ Failed to mount data directory", err=True)
+        else:
+            click.echo("\nMount point not set. You can set it later with:")
+            click.echo(f"  oryxforge admin config mount-set \"{suggested_path}\"")
+
+    except ValueError as e:
+        click.echo(f"\n❌ {str(e)}", err=True)
+        raise click.Abort()
+
+
+@admin.group()
 def mode():
     """Project mode management commands."""
     pass
@@ -440,18 +554,20 @@ def show_status():
     click.echo(f"Working Directory: {Path.cwd()}")
 
 
-@admin.command('config')
+@admin.command('show-config')
 @click.option('--project', 'show_project', is_flag=True, help='Show project configuration')
 @handle_errors
 def show_config(show_project: bool):
     """Show configuration files content."""
     cli_service = CLIService()
 
+    config_file = cli_service.config_service.config_file
+
     click.echo("Project Configuration:")
     click.echo("=" * 30)
-    if cli_service.project_config_file.exists():
-        click.echo(f"File: {cli_service.project_config_file}")
-        click.echo(cli_service.project_config_file.read_text())
+    if config_file.exists():
+        click.echo(f"File: {config_file}")
+        click.echo(config_file.read_text())
     else:
         click.echo("No project configuration file found")
 
@@ -589,6 +705,61 @@ def chat_command(message: str):
     except ValueError as e:
         click.echo(f"\n❌ {str(e)}", err=True)
         click.echo("\nPlease clarify your request or check your configuration.", err=True)
+        raise click.Abort()
+
+
+@admin.command('mount')
+@handle_errors
+def mount_project():
+    """
+    Mount the project data directory using rclone.
+
+    Mounts the GCS bucket for the current project to the configured mount point.
+    The data directory will be accessible as a local filesystem.
+
+    Prerequisites:
+        - Profile must be configured: oryxforge admin profile set --userid <id> --projectid <id>
+        - rclone must be installed and configured
+        - (Optional) Mount point configured: oryxforge admin config mount-set <path>
+
+    Example:
+        oryxforge admin mount
+    """
+    # Initialize ProjectService with mount_ensure=False to prevent auto-mount
+    project_service = ProjectService(mount_ensure=False)
+
+    # Attempt to mount
+    if project_service.mount():
+        click.echo(f"✅ Successfully mounted data directory at {project_service.mount_point}")
+        click.echo(f"   GCS path: oryx-forge-gcs:orxy-forge-datasets-dev/{project_service.user_id}/{project_service.project_id}")
+    else:
+        click.echo(f"❌ Failed to mount data directory", err=True)
+        raise click.Abort()
+
+
+@admin.command('unmount')
+@handle_errors
+def unmount_project():
+    """
+    Unmount the project data directory.
+
+    Unmounts the rclone-mounted data directory for the current project.
+
+    Prerequisites:
+        - Profile must be configured: oryxforge admin profile set --userid <id> --projectid <id>
+        - Data directory must be currently mounted
+
+    Example:
+        oryxforge admin unmount
+    """
+    # Initialize ProjectService with mount_ensure=False to prevent auto-mount
+    project_service = ProjectService(mount_ensure=False)
+
+    # Attempt to unmount
+    if project_service.unmount():
+        click.echo(f"✅ Successfully unmounted data directory at {project_service.mount_point}")
+    else:
+        click.echo(f"❌ Failed to unmount data directory", err=True)
         raise click.Abort()
 
 

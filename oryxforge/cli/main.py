@@ -28,6 +28,15 @@ except ImportError:
     pass
 
 
+# Add agent command group
+try:
+    from .agent import agent
+    cli.add_command(agent)
+except ImportError:
+    # Agent dependencies not installed, skip agent commands
+    pass
+
+
 # Add dev command group
 try:
     from .dev import dev

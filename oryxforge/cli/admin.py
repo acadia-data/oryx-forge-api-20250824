@@ -16,6 +16,28 @@ def admin():
 
 
 @admin.group()
+def config():
+    """Configuration management commands."""
+    pass
+
+
+@config.command('show')
+@handle_errors
+def show_config():
+    """Show configuration file content."""
+    cli_service = CLIService()
+    config_file = cli_service.config_service.config_file
+
+    click.echo("Project Configuration:")
+    click.echo("=" * 30)
+    if config_file.exists():
+        click.echo(f"File: {config_file}")
+        click.echo(config_file.read_text())
+    else:
+        click.echo("No project configuration file found")
+
+
+@config.group()
 def profile():
     """Profile management commands (user_id and project_id)."""
     pass
@@ -260,13 +282,64 @@ def activate_dataset(dataset_id: Optional[str], dataset_name: Optional[str]):
     click.echo(f"✅ Activated dataset: {dataset_id}")
 
 
-@admin.group()
-def config():
-    """Configuration management commands."""
+@config.group()
+def mode():
+    """Project mode management commands."""
     pass
 
 
-@config.command('mount-set')
+@mode.command('set')
+@click.argument('mode_value', type=click.Choice(['explore', 'edit', 'plan'], case_sensitive=False))
+@handle_errors
+def set_mode(mode_value: str):
+    """
+    Set the project mode.
+
+    MODE_VALUE: Project mode (explore, edit, or plan)
+
+    Examples:
+        oryxforge admin config mode set explore
+        oryxforge admin config mode set edit
+        oryxforge admin config mode set plan
+    """
+    cli_service = CLIService()
+
+    # Validate mode using CLIService constants
+    mode_lower = mode_value.lower()
+    if mode_lower not in CLIService.VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode_value}'. Must be one of: {', '.join(sorted(CLIService.VALID_MODES))}")
+
+    cli_service.mode_set(mode_lower)
+    click.echo(f"✅ Project mode set to '{mode_lower}'")
+
+
+@mode.command('get')
+@handle_errors
+def get_mode():
+    """
+    Get the current project mode.
+
+    Example:
+        oryxforge admin config mode get
+    """
+    cli_service = CLIService()
+    current_mode = cli_service.mode_get()
+
+    if current_mode:
+        click.echo(f"Current project mode: {current_mode}")
+    else:
+        click.echo("No project mode set.")
+        click.echo(f"Available modes: {', '.join(sorted(CLIService.VALID_MODES))}")
+        click.echo("Set a mode with: oryxforge admin config mode set <mode>")
+
+
+@config.group()
+def mount():
+    """Mount point configuration commands."""
+    pass
+
+
+@mount.command('set')
 @click.argument('mount_point')
 @handle_errors
 def set_mount_point(mount_point: str):
@@ -280,24 +353,24 @@ def set_mount_point(mount_point: str):
 
     Examples:
         # Windows
-        oryxforge admin config mount-set "D:\\data"
+        oryxforge admin config mount set "D:\\data"
 
         # Linux/macOS
-        oryxforge admin config mount-set "/mnt/data"
+        oryxforge admin config mount set "/mnt/data"
     """
     cli_service = CLIService()
     cli_service.mount_point_set(mount_point)
     click.echo(f"✅ Mount point set to: {mount_point}")
 
 
-@config.command('mount-get')
+@mount.command('get')
 @handle_errors
 def get_mount_point():
     """
     Get the configured mount point.
 
     Example:
-        oryxforge admin config mount-get
+        oryxforge admin config mount get
     """
     cli_service = CLIService()
     mount_point = cli_service.mount_point_get()
@@ -306,10 +379,10 @@ def get_mount_point():
         click.echo(f"Current mount point: {mount_point}")
     else:
         click.echo("No mount point configured. Using default: ./data")
-        click.echo("Set a mount point with: oryxforge admin config mount-set <path>")
+        click.echo("Set a mount point with: oryxforge admin config mount set <path>")
 
 
-@config.command('mount-suggest')
+@mount.command('suggest')
 @click.argument('base_path')
 @handle_errors
 def suggest_mount_point(base_path: str):
@@ -328,10 +401,10 @@ def suggest_mount_point(base_path: str):
 
     Examples:
         # Windows - suggest path
-        oryxforge admin config mount-suggest "D:\\data\\oryx-forge"
+        oryxforge admin config mount suggest "D:\\data\\oryx-forge"
 
         # Linux/macOS - suggest path
-        oryxforge admin config mount-suggest "/mnt/oryx-forge"
+        oryxforge admin config mount suggest "/mnt/oryx-forge"
 
     Prerequisites:
         - Profile must be configured with userid and projectid
@@ -367,62 +440,11 @@ def suggest_mount_point(base_path: str):
                     click.echo(f"❌ Failed to mount data directory", err=True)
         else:
             click.echo("\nMount point not set. You can set it later with:")
-            click.echo(f"  oryxforge admin config mount-set \"{suggested_path}\"")
+            click.echo(f"  oryxforge admin config mount set \"{suggested_path}\"")
 
     except ValueError as e:
         click.echo(f"\n❌ {str(e)}", err=True)
         raise click.Abort()
-
-
-@admin.group()
-def mode():
-    """Project mode management commands."""
-    pass
-
-
-@mode.command('set')
-@click.argument('mode_value', type=click.Choice(['explore', 'edit', 'plan'], case_sensitive=False))
-@handle_errors
-def set_mode(mode_value: str):
-    """
-    Set the project mode.
-
-    MODE_VALUE: Project mode (explore, edit, or plan)
-
-    Examples:
-        oryxforge admin mode set explore
-        oryxforge admin mode set edit
-        oryxforge admin mode set plan
-    """
-    cli_service = CLIService()
-
-    # Validate mode using CLIService constants
-    mode_lower = mode_value.lower()
-    if mode_lower not in CLIService.VALID_MODES:
-        raise ValueError(f"Invalid mode '{mode_value}'. Must be one of: {', '.join(sorted(CLIService.VALID_MODES))}")
-
-    cli_service.mode_set(mode_lower)
-    click.echo(f"✅ Project mode set to '{mode_lower}'")
-
-
-@mode.command('get')
-@handle_errors
-def get_mode():
-    """
-    Get the current project mode.
-
-    Example:
-        oryxforge admin mode get
-    """
-    cli_service = CLIService()
-    current_mode = cli_service.mode_get()
-
-    if current_mode:
-        click.echo(f"Current project mode: {current_mode}")
-    else:
-        click.echo("No project mode set.")
-        click.echo(f"Available modes: {', '.join(sorted(CLIService.VALID_MODES))}")
-        click.echo("Set a mode with: oryxforge admin mode set <mode>")
 
 
 @admin.group()
@@ -554,25 +576,13 @@ def show_status():
     click.echo(f"Working Directory: {Path.cwd()}")
 
 
-@admin.command('show-config')
-@click.option('--project', 'show_project', is_flag=True, help='Show project configuration')
-@handle_errors
-def show_config(show_project: bool):
-    """Show configuration files content."""
-    cli_service = CLIService()
-
-    config_file = cli_service.config_service.config_file
-
-    click.echo("Project Configuration:")
-    click.echo("=" * 30)
-    if config_file.exists():
-        click.echo(f"File: {config_file}")
-        click.echo(config_file.read_text())
-    else:
-        click.echo("No project configuration file found")
+@admin.group()
+def sources():
+    """Data source management commands."""
+    pass
 
 
-@projects.command('import')
+@sources.command('import')
 @click.argument('filepath', type=click.Path(exists=True))
 @handle_errors
 def import_file(filepath: str):
@@ -582,14 +592,14 @@ def import_file(filepath: str):
     FILEPATH: Path to the file to import (CSV, Excel, or Parquet)
 
     The command imports to the "Sources" dataset in the active project configured via:
-        oryxforge admin profile set --userid <userid> --projectid <projectid>
+        oryxforge admin config profile set --userid <userid> --projectid <projectid>
 
     Examples:
         # First set profile (one-time setup)
-        oryxforge admin profile set --userid "aaa" --projectid "bbb"
+        oryxforge admin config profile set --userid "aaa" --projectid "bbb"
 
         # Import file to Sources dataset
-        oryxforge admin projects import data.csv
+        oryxforge admin sources import data.csv
     """
     cli_service = CLIService()
 
@@ -610,6 +620,31 @@ def import_file(filepath: str):
             click.echo(f"✅ Activated dataset '{result['dataset_name']}' and sheet '{result['file_name']}'")
         except Exception as e:
             click.echo(f"⚠️  Warning: Could not activate sheet: {str(e)}", err=True)
+
+
+@sources.command('list')
+@handle_errors
+def list_sources():
+    """
+    List all imported data sources for the current project.
+
+    Shows sources imported through the 'admin sources import' command.
+    """
+    cli_service = CLIService()
+    sources_list = cli_service.sources_list()
+
+    if not sources_list:
+        click.echo("No data sources found for this project.")
+        return
+
+    click.echo("\nData Sources:")
+    click.echo("=" * 80)
+    for source in sources_list:
+        click.echo(f"Name: {source['name']}")
+        click.echo(f"  Type: {source['file_type']}")
+        click.echo(f"  Rows: {source.get('row_count', 'N/A')}")
+        click.echo(f"  Imported: {source['created_at']}")
+        click.echo("-" * 80)
 
 
 @admin.group()
@@ -651,63 +686,6 @@ def list_data():
     click.echo(f"\nTotal: {len(df)} datasheet(s)")
 
 
-@admin.group()
-def agent():
-    """AI agent commands for interactive data analysis."""
-    pass
-
-
-@agent.command('chat')
-@click.argument('message')
-@handle_errors
-def chat_command(message: str):
-    """
-    Chat with the AI agent for interactive data analysis.
-
-    MESSAGE: Your question or request for the AI agent
-
-    The agent will analyze your request, determine the appropriate data operations,
-    and generate code to perform the analysis.
-
-    Examples:
-        # Analyze data in the active sheet
-        oryxforge agent chat "show me summary statistics"
-
-        # Create a new analysis
-        oryxforge agent chat "create a chart of sales by region"
-
-        # Edit existing analysis
-        oryxforge agent chat "add a trend line to the chart"
-
-    Prerequisites:
-        - Profile must be configured: oryxforge admin profile set --userid <id> --projectid <id>
-        - Dataset and sheet should be activated (optional but recommended)
-        - Mode can be set: oryxforge admin mode set explore
-    """
-    cli_service = CLIService()
-
-    try:
-        # Process chat message
-        result = cli_service.chat(message=message)
-
-        # Display agent response
-        click.echo("\n" + "=" * 80)
-        click.echo("AI Agent Response:")
-        click.echo("=" * 80)
-        click.echo(result['message'])
-        click.echo("=" * 80)
-
-        # Display metadata
-        click.echo(f"\n📊 Target: {result['target_dataset']}.{result['target_sheet']}")
-        click.echo(f"💰 Cost: ${result['cost_usd']:.4f}")
-        click.echo(f"⏱️  Duration: {result['duration_ms']}ms")
-
-    except ValueError as e:
-        click.echo(f"\n❌ {str(e)}", err=True)
-        click.echo("\nPlease clarify your request or check your configuration.", err=True)
-        raise click.Abort()
-
-
 @admin.command('mount')
 @handle_errors
 def mount_project():
@@ -718,9 +696,9 @@ def mount_project():
     The data directory will be accessible as a local filesystem.
 
     Prerequisites:
-        - Profile must be configured: oryxforge admin profile set --userid <id> --projectid <id>
+        - Profile must be configured: oryxforge admin config profile set --userid <id> --projectid <id>
         - rclone must be installed and configured
-        - (Optional) Mount point configured: oryxforge admin config mount-set <path>
+        - (Optional) Mount point configured: oryxforge admin config mount set <path>
 
     Example:
         oryxforge admin mount
@@ -746,7 +724,7 @@ def unmount_project():
     Unmounts the rclone-mounted data directory for the current project.
 
     Prerequisites:
-        - Profile must be configured: oryxforge admin profile set --userid <id> --projectid <id>
+        - Profile must be configured: oryxforge admin config profile set --userid <id> --projectid <id>
         - Data directory must be currently mounted
 
     Example:

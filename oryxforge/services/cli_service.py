@@ -490,6 +490,41 @@ class CLIService:
         except Exception as e:
             raise ValueError(f"Failed to pull and activate project: {str(e)}")
 
+    def sources_list(self) -> List[Dict[str, Any]]:
+        """
+        List all data sources for the current project.
+
+        Returns:
+            List of dicts with source information (name, file_type, created_at, etc.)
+
+        Raises:
+            ValueError: If no profile configured or query fails
+        """
+        from .iam import CredentialsManager
+
+        # Get profile
+        creds_manager = CredentialsManager(working_dir=str(self.cwd))
+        try:
+            profile = creds_manager.get_profile()
+            project_id = profile['project_id']
+        except ValueError as e:
+            raise ValueError(
+                f"No profile configured. Run 'oryxforge admin config profile set --userid <userid> --projectid <projectid>' first. {str(e)}"
+            )
+
+        try:
+            response = (
+                self.supabase_client.table("data_sources")
+                .select("id, name, type as file_type, created_at, status")
+                .eq("project_id", project_id)
+                .eq("user_owner", self.user_id)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            return response.data
+        except Exception as e:
+            raise ValueError(f"Failed to list data sources: {str(e)}")
+
     def import_file(self, path: str) -> Dict[str, Any]:
         """
         Import a file into the active project's "Sources" dataset.

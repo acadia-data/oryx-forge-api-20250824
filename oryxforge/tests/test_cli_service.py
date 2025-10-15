@@ -35,24 +35,10 @@ class TestCLIService:
             yield Path(temp_dir)
 
     @pytest.fixture
-    def config_patch(self, temp_config_dir):
-        """Patch the config_dir to use temp directory."""
-        config_dir = temp_config_dir / '.oryxforge'
-        config_dir.mkdir(exist_ok=True)
-        with patch.object(CLIService, 'config_dir', new=property(lambda self: config_dir)):
-            yield config_dir
-
-    @pytest.fixture
-    def cli_service(self, config_patch, temp_working_dir):
+    def cli_service(self, temp_working_dir):
         """Create CLIService instance for integration testing."""
-        # Create config file with user ID
-        config_file = config_patch / 'cfg.ini'
-        config = ConfigObj()
-        config['user'] = {'userid': self.USER_ID}
-        config.filename = str(config_file)
-        config.write()
-
-        # Create service with temp working directory
+        # Create service with temp working directory and explicit user_id
+        # No config_patch needed - CLIService uses .oryxforge.cfg directly
         service = CLIService(user_id=self.USER_ID, cwd=str(temp_working_dir))
         return service
 
@@ -88,103 +74,14 @@ class TestCLIService:
         with pytest.raises(ValueError, match="Failed to validate user"):
             CLIService(user_id='invalid-user-id', cwd=str(temp_working_dir))
 
-    def test_get_user_config_no_file(self, cli_service):
-        """Test get_user_config when file doesn't exist."""
-        # Remove config file
-        cli_service.config_file.unlink()
-        result = cli_service.get_user_config()
-        assert result == {}
-
-    def test_get_user_config_existing_file(self, cli_service):
-        """Test get_user_config with existing file."""
-        result = cli_service.get_user_config()
-        assert result == {'userid': self.USER_ID}
 
     def test_get_user_id_from_instance(self, cli_service):
         """Test get_user_id returns instance user_id."""
-        result = cli_service.get_user_id()
-        assert result == self.USER_ID
+        # CLIService has user_id as instance attribute
+        assert cli_service.user_id == self.USER_ID
 
-    def test_get_user_id_from_config(self, cli_service):
-        """Test get_user_id from config file when instance user_id not available."""
-        # Save and remove instance user_id to force config file lookup
-        original_id = cli_service.user_id
-        delattr(cli_service, 'user_id')
 
-        try:
-            result = cli_service.get_user_id()
-            assert result == self.USER_ID
-        finally:
-            # Restore user_id
-            cli_service.user_id = original_id
 
-    def test_get_user_id_no_config(self, cli_service):
-        """Test get_user_id when no config exists."""
-        # Save original, remove instance user_id and config file
-        original_id = cli_service.user_id
-        delattr(cli_service, 'user_id')
-        cli_service.config_file.unlink()
-
-        try:
-            result = cli_service.get_user_id()
-            assert result is None
-        finally:
-            cli_service.user_id = original_id
-
-    def test_get_configured_user_id_static_method(self, temp_config_dir):
-        """Test static method get_configured_user_id."""
-        # Create config directory structure
-        config_dir = temp_config_dir / '.oryxforge'
-        config_dir.mkdir(exist_ok=True)
-        config_file = config_dir / 'cfg.ini'
-        config = ConfigObj()
-        config['user'] = {'userid': self.USER_ID}
-        config.filename = str(config_file)
-        config.write()
-
-        # Mock Path.home() to return our temp directory
-        with patch('pathlib.Path.home', return_value=temp_config_dir):
-            result = CLIService.get_configured_user_id()
-            assert result == self.USER_ID
-
-    def test_get_configured_user_id_no_config(self):
-        """Test static method when no config file exists."""
-        with patch('pathlib.Path.home') as mock_home:
-            # Use a non-existent directory
-            mock_home.return_value = Path('/non/existent/path')
-            result = CLIService.get_configured_user_id()
-            assert result is None
-
-    def test_get_configured_user_id_empty_config(self, temp_config_dir):
-        """Test static method with empty config file."""
-        from configobj import ConfigObj
-
-        # Create empty config file
-        config_file = temp_config_dir / 'cfg.ini'
-        config = ConfigObj()
-        config.filename = str(config_file)
-        config.write()
-
-        with patch('pathlib.Path.home', return_value=temp_config_dir):
-            result = CLIService.get_configured_user_id()
-            assert result is None
-
-    def test_set_user_config_valid_user(self, cli_service):
-        """Test setting user config for valid user."""
-        # Remove existing config
-        cli_service.config_file.unlink()
-
-        # Set config with valid user ID (same as test user)
-        cli_service.set_user_config(self.USER_ID)
-
-        # Verify config was written
-        config = ConfigObj(str(cli_service.config_file))
-        assert config['user']['userid'] == self.USER_ID
-
-    def test_set_user_config_invalid_user(self, cli_service):
-        """Test setting user config with invalid user."""
-        with pytest.raises(ValueError, match="Failed to validate user"):
-            cli_service.set_user_config('00000000-0000-0000-0000-000000000000')
 
     def test_projects_create_success(self, cli_service, test_project_name):
         """Test successful project creation."""
@@ -290,8 +187,9 @@ class TestCLIService:
             # Activate the project
             cli_service.project_activate(project_id)
 
-            # Verify profile was written
-            config = ConfigObj(str(cli_service.project_config_file))
+            # Verify profile was written to .oryxforge.cfg
+            config_file = cli_service.cwd / '.oryxforge.cfg'
+            config = ConfigObj(str(config_file))
             assert config['profile']['project_id'] == project_id
             assert config['profile']['user_id'] == cli_service.user_id
         finally:
@@ -322,8 +220,9 @@ class TestCLIService:
             # Activate the dataset
             cli_service.dataset_activate(dataset_id)
 
-            # Verify config was written
-            config = ConfigObj(str(cli_service.project_config_file))
+            # Verify config was written to .oryxforge.cfg
+            config_file = cli_service.cwd / '.oryxforge.cfg'
+            config = ConfigObj(str(config_file))
             assert config['active']['dataset_id'] == dataset_id
         finally:
             # Clean up
@@ -356,8 +255,9 @@ class TestCLIService:
             # Activate the sheet
             cli_service.sheet_activate(sheet_id)
 
-            # Verify config was written
-            config = ConfigObj(str(cli_service.project_config_file))
+            # Verify config was written to .oryxforge.cfg
+            config_file = cli_service.cwd / '.oryxforge.cfg'
+            config = ConfigObj(str(config_file))
             assert config['active']['sheet_id'] == sheet_id
         finally:
             # Clean up
@@ -376,8 +276,9 @@ class TestCLIService:
     def test_get_active_no_file(self, cli_service):
         """Test get_active when config file doesn't exist."""
         # Make sure no config file exists
-        if cli_service.project_config_file.exists():
-            cli_service.project_config_file.unlink()
+        config_file = cli_service.cwd / '.oryxforge.cfg'
+        if config_file.exists():
+            config_file.unlink()
 
         result = cli_service.get_active()
         assert result == {}

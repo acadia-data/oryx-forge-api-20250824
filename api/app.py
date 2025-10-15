@@ -104,7 +104,7 @@ def set_profile(request: ProfileRequest):
     Set profile configuration (user_id and project_id).
 
     This endpoint allows setting the profile which can be used by other endpoints.
-    The profile is written to the .oryxforge file in the working directory.
+    The profile is written to the .oryxforge.cfg file in the working directory.
     """
     from oryxforge.services.iam import CredentialsManager
     from pathlib import Path

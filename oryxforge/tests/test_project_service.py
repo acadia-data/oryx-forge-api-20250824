@@ -315,11 +315,6 @@ class TestProjectService:
         assert result is False
 
 
-    def test_is_initialized_true(self, project_service):
-        """Test is_initialized checks for GitLab repository - skip in test environment."""
-        # is_initialized checks if GitLab repository exists
-        # In test environment without git repo, this will return False
-        pytest.skip("Test project doesn't have GitLab repository initialized")
 
     def test_is_initialized_false(self, project_service):
         """Test is_initialized returns False for uninitialized project."""

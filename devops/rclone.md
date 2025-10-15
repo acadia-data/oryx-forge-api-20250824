@@ -47,7 +47,7 @@ This last command is useful when configuring rclone on a headless server - you r
 
 token also works across machines
 
-# mount
+# mount project specific
 
 ## config
 
@@ -76,18 +76,12 @@ $rcloneProcess = Start-Process rclone -ArgumentList "mount","oryx-forge-gcs:orxy
 **stop mount**
 Stop-Process -Id $rcloneProcess.Id -Force
 
+# mount api
 
-### nssm
+rclone mount oryx-forge-gcs:orxy-forge-datasets-dev D:/data/oryx-forge-api/data --vfs-cache-mode writes  --vfs-cache-max-age 24h
 
-kind of annoying because can't just mount any random folder
-
-nssm install rclone-mount "C:\Users\deepmind\AppData\Local\Microsoft\WinGet\Links\rclone.exe" "mount remote:path X: --vfs-cache-mode full"
-nssm install rclone "C:\Program Files\rclone\rclone.exe" mount remote:path X: --vfs-cache-mode full
-nssm start rclone-mount
-nssm stop rclone-mount
-nssm status rclone-mount
-nssm restart rclone-mount
-nssm remove rclone-mount
+Start-Process rclone -ArgumentList "mount","oryx-forge-gcs:orxy-forge-datasets-dev","D:/data/oryx-forge-api/mnt/data","--vfs-cache-mode writes" -WindowStyle Hidden
+Stop-Process -Name rclone -Force
 
 ## gcp cloud run
 
@@ -171,3 +165,20 @@ gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET \
 # 4. Generate key for user
 gcloud iam service-accounts keys create user1-key.json \
   --iam-account=user1-storage@PROJECT.iam.gserviceaccount.com
+
+
+
+
+### nssm => windows service didn't work
+
+kind of annoying because can't just mount any random folder
+
+nssm install rclone-oryx-forge-api "C:\Users\deepmind\AppData\Local\Microsoft\WinGet\Links\rclone.exe" "mount oryx-forge-gcs:orxy-forge-datasets-dev D:/data/oryx-forge-api/data --vfs-cache-mode writes  --vfs-cache-max-age 24h"
+nssm install rclone "C:\Program Files\rclone\rclone.exe" mount remote:path X: --vfs-cache-mode full
+nssm start rclone-oryx-forge-api
+Start-Process powershell -Verb RunAs -ArgumentList "-Command", "nssm start rclone-oryx-forge-api"
+nssm stop rclone-oryx-forge-api
+Start-Process powershell -Verb RunAs -ArgumentList "-Command", "nssm stop rclone-oryx-forge-api"
+nssm status rclone-oryx-forge-api
+nssm restart rclone-oryx-forge-api
+nssm remove rclone-oryx-forge-api

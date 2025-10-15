@@ -266,7 +266,7 @@ class CLIService:
         path = self.config_service.validate_mount_point(mount_point)
 
         # Store as POSIX format for cross-platform compatibility
-        self.config_service.set('active', 'mount_point', path.as_posix())
+        self.config_service.set('mount', 'mount_point', path.as_posix())
 
         logger.success(f"Mount point set to '{path.as_posix()}'")
 
@@ -277,7 +277,7 @@ class CLIService:
         Returns:
             Optional[str]: Mount point path in POSIX format, or None if not set
         """
-        return self.config_service.get('active', 'mount_point')
+        return self.config_service.get('mount', 'mount_point')
 
     def mount_point_suggest(self, base_path: str) -> str:
         """

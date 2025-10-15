@@ -98,6 +98,12 @@ class DataContextRequest(ProfileRequest):
     sheet: str
 
 
+class DataFrameLoadRequest(BaseModel):
+    user_id: str
+    project_id: str
+    name_python: str  # Format: "dataset.sheet"
+
+
 @app.post("/profile/set")
 def set_profile(request: ProfileRequest):
     """
@@ -274,3 +280,29 @@ def rt_data_load(request: FileImportRequest):
     exec(code, ns)
     df_out = ns['df_out']
     return df_out.json(orient='records')
+
+
+@app.post("/data/load-dataframe")
+def load_dataframe(request: DataFrameLoadRequest):
+    """
+    Load a DataFrame from IOService using name_python format (dataset.sheet).
+
+    Sets project context, loads the DataFrame, and returns it in spreadsheet format
+    matching the /files/preview endpoint structure (headers + data arrays).
+    """
+    from oryxforge.services.io_service import IOService
+    from oryxforge.services.env_config import ProjectContext
+
+    # Set project context - this writes config and sets ContextVar
+    ProjectContext.set(user_id=request.user_id, project_id=request.project_id)
+
+    # Create IOService with zero parameters - reads everything from context
+    io_service = IOService()
+
+    # Load DataFrame using name_python (e.g., "sources.sheet1")
+    df = io_service.load_df_pd(request.name_python)
+
+    # Convert to spreadsheet format (headers + data arrays)
+    formatted_data = dataframe_to_spreadsheet_format(df)
+
+    return formatted_data

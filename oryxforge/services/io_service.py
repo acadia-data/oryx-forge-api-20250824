@@ -21,21 +21,17 @@ class IOService:
     All with automatic dataset/sheet metadata management.
     """
 
-    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None):
+    def __init__(self):
         """
         Initialize IO Service.
 
-        Gets user_id and project_id from CredentialsManager if not provided.
-
-        Args:
-            project_id: Project ID (if None, read from profile)
-            user_id: User ID (if None, read from profile)
-            working_dir: Working directory for CredentialsManager (if None, use current directory)
+        All configuration is read from ProjectContext and config files.
+        No parameters needed!
 
         Raises:
             ValueError: If project doesn't exist or profile is not configured
         """
-        self.ps = ProjectService(project_id=project_id, user_id=user_id, working_dir=working_dir)
+        self.ps = ProjectService()
 
     def _build_relative_uri(self, dataset_name_python: str, sheet_name_python: str, extension: str) -> str:
         """
@@ -703,6 +699,13 @@ class IOService:
             # Dynamic import of task module
             try:
                 import d6tflow
+                import sys
+
+                # Add project directory to Python path so we can import tasks
+                if self.ps.working_dir not in sys.path:
+                    sys.path.insert(0, self.ps.working_dir)
+                    logger.debug(f"Added to sys.path: {self.ps.working_dir}")
+
                 task_module = importlib.import_module(f'tasks.{dataset}')
                 logger.debug(f"Successfully imported module: tasks.{dataset}")
             except ImportError as e:

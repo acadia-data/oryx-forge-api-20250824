@@ -25,7 +25,7 @@ class ProjectService:
     Service class for project-level operations including datasets, datasheets, and git operations.
     """
 
-    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None, mount_point: Optional[str] = None, mount_ensure: bool = True):
+    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None):
         """
         Initialize project service.
 
@@ -34,19 +34,21 @@ class ProjectService:
         Args:
             project_id: Project ID (if None, read from profile)
             user_id: User ID (if None, read from profile)
-            working_dir: Working directory for CredentialsManager (if None, use current directory)
-            mount_point: Mount point for rclone data directory (if None, read from config, then default to "./data")
-            mount_ensure: Whether to automatically ensure mount on initialization (default: True)
+            working_dir: Working directory (if None, get from ProjectContext)
 
         Raises:
             ValueError: If project doesn't exist or profile is not configured
         """
-        # Store working_dir for config access
-        self.working_dir = working_dir or str(Path.cwd())
+        # Get working_dir from ProjectContext if not provided
+        if working_dir is None:
+            from .env_config import ProjectContext
+            self.working_dir = ProjectContext.get()
+        else:
+            self.working_dir = working_dir
 
         # Get profile from CredentialsManager if not provided
         if project_id is None or user_id is None:
-            creds_manager = CredentialsManager(working_dir=working_dir)
+            creds_manager = CredentialsManager(working_dir=self.working_dir)
             profile = creds_manager.get_profile()
             self.project_id = project_id or profile['project_id']
             self.user_id = user_id or profile['user_id']
@@ -54,22 +56,21 @@ class ProjectService:
             self.project_id = project_id
             self.user_id = user_id
 
-        # Resolve mount point: parameter > config > default
-        if mount_point is None:
-            # Try to get from config
-            config_service = ConfigService(working_dir=self.working_dir)
-            saved_mount = config_service.get('active', 'mount_point')
-            if saved_mount:
-                # Convert from POSIX format to native Path
-                mount_point = str(Path(saved_mount))
-                logger.debug(f"Using mount point from config: {mount_point}")
-            else:
-                # Use default
-                mount_point = "./data"
-                logger.debug("Using default mount point: ./data")
+        # Read mount configuration from [mount] section
+        config_service = ConfigService(working_dir=self.working_dir)
+        saved_mount = config_service.get('mount', 'mount_point')
+        if saved_mount:
+            # Convert from POSIX format to native Path
+            self.mount_point = str(Path(saved_mount))
+            logger.debug(f"Using mount point from config: {self.mount_point}")
+        else:
+            # Use default
+            self.mount_point = "./data"
+            logger.debug("Using default mount point: ./data")
 
-        # Store mount point
-        self.mount_point = mount_point
+        # Read mount_ensure from [mount] section
+        mount_ensure_str = config_service.get('mount', 'mount_ensure')
+        mount_ensure = (mount_ensure_str != 'false') if mount_ensure_str else True
 
         # Initialize Supabase client
         self.supabase_client = init_supabase_client()
@@ -77,7 +78,7 @@ class ProjectService:
         # Validate project exists and belongs to user
         self._validate_project()
 
-        # Ensure data is mounted if requested
+        # Ensure data is mounted if configured
         if mount_ensure:
             self.ensure_mount()
 

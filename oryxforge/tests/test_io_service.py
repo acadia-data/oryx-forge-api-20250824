@@ -31,35 +31,36 @@ class TestIOService:
         """Cleanup all created resources after all tests complete."""
         yield
 
-        # Create temporary IOService for cleanup
-        if test_project_id:
+        # Clean up files using IOService (if we have a project and files to clean)
+        if test_project_id and self.created_files:
             try:
                 import tempfile
-                from ..services.iam import CredentialsManager
+                from ..services.env_config import ProjectContext
 
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    creds_manager = CredentialsManager(working_dir=temp_dir)
-                    creds_manager.set_profile(user_id=self.USER_ID, project_id=test_project_id)
-                    cleanup_io = IOService(working_dir=temp_dir)
+                    # Set context with explicit temp directory
+                    ProjectContext.set(
+                        user_id=self.USER_ID,
+                        project_id=test_project_id,
+                        working_dir=temp_dir
+                    )
 
-                    # Delete files and sheet metadata
+                    # Create IOService - reads from context
+                    io_service = IOService()
+
+                    # Delete tracked files
                     for name_python in self.created_files:
-                        try:
-                            # Try all delete methods (one will succeed based on file type)
+                        for delete_method in [io_service.delete_df, io_service.delete_chart,
+                                             io_service.delete_markdown]:
                             try:
-                                cleanup_io.delete_df(name_python)
+                                delete_method(name_python)
+                                break  # Success - move to next file
                             except:
-                                try:
-                                    cleanup_io.delete_chart(name_python)
-                                except:
-                                    try:
-                                        cleanup_io.delete_markdown(name_python)
-                                    except:
-                                        pass
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                                continue  # Try next delete method
+            except Exception as e:
+                print(f"Cleanup failed: {e}")
+            finally:
+                ProjectContext.clear()
 
         # Cleanup datasets (if any tracked - shouldn't be any since we use Exploration)
         for dataset_id in self.created_datasets:
@@ -68,7 +69,7 @@ class TestIOService:
             except Exception:
                 pass
 
-        # Clear tracking lists
+        # Always clear tracking lists
         self.created_datasets.clear()
         self.created_files.clear()
 
@@ -99,16 +100,17 @@ class TestIOService:
         if not test_project_id:
             pytest.skip("No test project available - please create a project for user 24d811e2-1801-4208-8030-a86abbda59b8")
 
-        # Set up profile
-        creds_manager = CredentialsManager(working_dir=temp_working_dir)
-        creds_manager.set_profile(user_id=self.USER_ID, project_id=test_project_id)
+        # Set up project context with temp directory
+        from ..services.env_config import ProjectContext
+        ProjectContext.set(user_id=self.USER_ID, project_id=test_project_id, working_dir=temp_working_dir)
 
-        # Create IOService without auto-mount for testing
-        from ..services.project_service import ProjectService
-        ps = ProjectService(project_id=test_project_id, user_id=self.USER_ID, working_dir=temp_working_dir, mount_ensure=False)
-        io_svc = IOService.__new__(IOService)
-        io_svc.ps = ps
-        return io_svc
+        # Create IOService - reads from context
+        io_service = IOService()
+
+        yield io_service
+
+        # Clear context after test
+        ProjectContext.clear()
 
     @pytest.fixture
     def sample_dataframe(self):

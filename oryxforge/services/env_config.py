@@ -33,7 +33,7 @@ class ProjectContext:
                os.environ.get('FASTAPI_ENV') is not None
 
     @staticmethod
-    def set(user_id: str, project_id: str) -> str:
+    def set(user_id: str, project_id: str, working_dir: str = None) -> str:
         """
         Set the current project context.
 
@@ -43,12 +43,19 @@ class ProjectContext:
         Args:
             user_id: User UUID
             project_id: Project UUID
+            working_dir: Optional working directory (for tests). If None, auto-detect based on environment.
 
         Returns:
             str: Working directory that was set
         """
-        # Determine working directory based on environment
-        if ProjectContext.is_api_mode():
+        # Track if working_dir was explicitly provided (test mode)
+        is_test_mode = working_dir is not None
+
+        # Determine working directory
+        if working_dir:
+            # Explicitly provided (typically for tests)
+            working_dir = str(Path(working_dir).resolve())
+        elif ProjectContext.is_api_mode():
             if os.environ.get('GOOGLE_CLOUD_PROJECT'):
                 # GCP production
                 working_dir = f"/tmp/{user_id}/{project_id}"
@@ -64,7 +71,7 @@ class ProjectContext:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
 
         # Write configuration file
-        ProjectContext._init_config(user_id, project_id, working_dir)
+        ProjectContext._init_config(user_id, project_id, working_dir, is_test_mode=is_test_mode)
 
         # Set context variable
         _project_context.set(working_dir)
@@ -95,11 +102,17 @@ class ProjectContext:
         _project_context.set(None)
 
     @staticmethod
-    def _init_config(user_id: str, project_id: str, working_dir: str) -> None:
+    def _init_config(user_id: str, project_id: str, working_dir: str, is_test_mode: bool = False) -> None:
         """
         Initialize configuration file.
 
         Writes to .oryxforge.cfg with [profile] and [mount] sections.
+
+        Args:
+            user_id: User UUID
+            project_id: Project UUID
+            working_dir: Working directory path
+            is_test_mode: If True, disable mount_ensure (for tests)
         """
         from .iam import CredentialsManager
         from .config_service import ConfigService
@@ -111,7 +124,11 @@ class ProjectContext:
         # Write mount configuration to [mount] section
         config_service = ConfigService(working_dir=working_dir)
 
-        if ProjectContext.is_api_mode():
+        if is_test_mode:
+            # Test mode - disable auto-mounting
+            config_service.set('mount', 'mount_ensure', 'false')
+            logger.debug("Test mode: mount_ensure=false")
+        elif ProjectContext.is_api_mode():
             # API mode - set mount point and disable auto-mounting
             if os.environ.get('GOOGLE_CLOUD_PROJECT'):
                 mount_point = f"/mnt/data/{user_id}/{project_id}"

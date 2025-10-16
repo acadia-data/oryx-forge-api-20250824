@@ -33,7 +33,7 @@ class ProjectContext:
                os.environ.get('FASTAPI_ENV') is not None
 
     @staticmethod
-    def set(user_id: str, project_id: str, working_dir: str = None) -> str:
+    def set(user_id: str, project_id: str, working_dir: str = None, write_config: bool = True) -> str:
         """
         Set the current project context.
 
@@ -44,6 +44,8 @@ class ProjectContext:
             user_id: User UUID
             project_id: Project UUID
             working_dir: Optional working directory (for tests). If None, auto-detect based on environment.
+            write_config: Whether to write .oryxforge.cfg file (default True).
+                         Set to False when cloning repo to avoid non-empty directory issue.
 
         Returns:
             str: Working directory that was set
@@ -75,8 +77,9 @@ class ProjectContext:
         # Create directory
         Path(working_dir).mkdir(parents=True, exist_ok=True)
 
-        # Write configuration file
-        ProjectContext._init_config(user_id, project_id, working_dir, is_test_mode=is_test_mode)
+        # Optionally write configuration file (skip during clone, write after)
+        if write_config:
+            ProjectContext._init_config(user_id, project_id, working_dir, is_test_mode=is_test_mode)
 
         # Set context variable
         _project_context.set(working_dir)
@@ -105,6 +108,27 @@ class ProjectContext:
     def clear():
         """Clear the project context."""
         _project_context.set(None)
+
+    @staticmethod
+    def write_config(user_id: str, project_id: str, working_dir: str = None) -> None:
+        """
+        Write configuration file after repo is cloned.
+
+        This allows setting context (creating directory) without writing config first,
+        so git clone can work on an empty directory. Call this after clone completes.
+
+        Args:
+            user_id: User UUID
+            project_id: Project UUID
+            working_dir: Optional working directory. If None, uses current context.
+        """
+        if working_dir is None:
+            working_dir = ProjectContext.get()
+
+        # Config writing happens after clone, so not test mode
+        is_test_mode = False
+        ProjectContext._init_config(user_id, project_id, working_dir, is_test_mode=is_test_mode)
+        logger.debug(f"Wrote config to {working_dir}")
 
     @staticmethod
     def _init_config(user_id: str, project_id: str, working_dir: str, is_test_mode: bool = False) -> None:

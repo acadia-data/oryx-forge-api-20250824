@@ -12,12 +12,14 @@ from unittest.mock import patch
 from ..services.project_service import ProjectService
 from ..services.utils import init_supabase_client
 from ..services.iam import CredentialsManager
+from .test_config import TEST_USER_ID, TEST_PROJECT_ID
 
 
 class TestProjectService:
     """Integration test cases for ProjectService."""
 
-    USER_ID = '24d811e2-1801-4208-8030-a86abbda59b8'
+    USER_ID = TEST_USER_ID
+    PROJECT_ID = TEST_PROJECT_ID
 
     # Track created resources for cleanup
     created_datasets = []
@@ -49,17 +51,9 @@ class TestProjectService:
         return init_supabase_client()
 
     @pytest.fixture(scope="class")
-    def test_project_id(self, supabase_client) -> Optional[str]:
-        """Find or create a test project for integration tests."""
-        # Try to find existing test project
-        response = supabase_client.table("projects").select("id").eq("user_owner", self.USER_ID).limit(1).execute()
-
-        if response.data:
-            return response.data[0]['id']
-
-        # If no projects exist, we'll need one to be created manually
-        # or skip tests that require a project
-        return None
+    def test_project_id(self) -> str:
+        """Return the configured test project ID."""
+        return self.PROJECT_ID
 
     @pytest.fixture
     def temp_working_dir(self):
@@ -70,9 +64,6 @@ class TestProjectService:
     @pytest.fixture
     def project_service(self, test_project_id, temp_working_dir):
         """Create ProjectService instance for integration testing."""
-        if not test_project_id:
-            pytest.skip("No test project available - please create a project for user 24d811e2-1801-4208-8030-a86abbda59b8")
-
         # Set up profile using CredentialsManager
         creds_manager = CredentialsManager(working_dir=temp_working_dir)
         creds_manager.set_profile(user_id=self.USER_ID, project_id=test_project_id)
@@ -125,8 +116,6 @@ class TestProjectService:
 
     def test_validate_project_access_denied(self, test_project_id):
         """Test project validation with access denied."""
-        if not test_project_id:
-            pytest.skip("No test project available")
         # Use a different user ID that shouldn't have access
         with pytest.raises(ValueError, match="Failed to validate project"):
             ProjectService(test_project_id, 'wrong-user-id')
@@ -284,9 +273,6 @@ class TestProjectService:
 
     def test_ds_exists_with_wrong_user(self, test_project_id):
         """Test ds_exists returns False when dataset belongs to different user."""
-        if not test_project_id:
-            pytest.skip("No test project available")
-
         # Create service with different user ID
         try:
             different_service = ProjectService(test_project_id, 'different-user-id')

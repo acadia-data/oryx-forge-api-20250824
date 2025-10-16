@@ -20,7 +20,7 @@ oryxforge/
 │   └── chat                      # AI-powered data analysis
 │
 └── admin/
-    ├── pull                      # Pull and activate project
+    ├── pull                      # Pull/clone project repository
     ├── mount                     # Mount data directory
     ├── unmount                   # Unmount data directory
     ├── status                    # Show current status
@@ -33,7 +33,8 @@ oryxforge/
     │
     ├── projects/
     │   ├── list
-    │   └── create
+    │   ├── create
+    │   └── init                  # Create + pull in one step
     │
     ├── sources/                  # Data source imports
     │   ├── import
@@ -53,17 +54,28 @@ oryxforge/
 
 ## Quick Start
 
+### Option 1: Initialize New Project (Recommended)
+
 ```bash
-# 1. Set up your profile (one-time setup)
-oryxforge admin config profile set --userid "your-user-id" --projectid "your-project-id"
+# Create new project and set it up locally in one step
+oryxforge admin projects init "My Project" --userid "your-user-id"
 
-# 2. Pull a project
-oryxforge admin pull
+# This creates the project, clones the repository, and sets up configuration
+# You'll get a new folder: ./my-project/
 
-# 3. Import data
+cd my-project
 oryxforge admin sources import data.csv
+oryxforge agent chat "show me summary statistics"
+```
 
-# 4. Chat with the AI agent
+### Option 2: Pull Existing Project
+
+```bash
+# Pull an existing project by ID
+oryxforge admin pull --projectid "project-id" --userid "your-user-id"
+
+cd project-folder
+oryxforge admin sources import data.csv
 oryxforge agent chat "show me summary statistics"
 ```
 
@@ -282,37 +294,82 @@ ID: abc123...  Name: My Data Project
 ID: def456...  Name: Customer Analysis
 ```
 
-### Create Project
+### Create New Project (Recommended: Use `init` instead)
 
-Create a new project:
-
-```bash
-oryxforge admin projects create "My New Project"
-```
-
-This creates the same database entries as the frontend web interface.
-
-### Pull and Activate Project
-
-Pull a project and set it up locally:
+Create a new project in the database and on GitLab:
 
 ```bash
-# Interactive mode - shows project selection
-oryxforge admin pull
-
-# Specify project ID directly
-oryxforge admin pull --id abc123
-
-# Specify target directory
-oryxforge admin pull --id abc123 --cwd /path/to/project
+oryxforge admin projects create "My New Project" --userid "your-user-id"
 ```
 
-The pull command:
-- Validates the project exists and is accessible
-- Initializes the project if needed (creates git repo, updates database)
-- Pulls the git repository to the specified directory
-- Activates the project locally
-- Auto-activates the default "exploration" dataset and first datasheet
+This creates:
+- Database entry for the project
+- GitLab repository for the project
+
+**Next steps after `create`:**
+```bash
+# Pull the project to set it up locally
+oryxforge admin pull --projectid <project-id> --userid "your-user-id"
+```
+
+### Initialize New Project (Create + Pull in One Step)
+
+**Recommended:** Use `init` to create and set up a project in one command:
+
+```bash
+# Create project and set it up locally
+oryxforge admin projects init "My New Project" --userid "your-user-id"
+
+# With custom target directory
+oryxforge admin projects init "My New Project" --userid "your-user-id" --target ./my-folder
+```
+
+The `init` command:
+1. Creates project in database
+2. Creates GitLab repository
+3. Clones repository to local directory
+4. Sets up `.oryxforge.cfg` configuration file inside the project directory
+
+**Output:**
+```bash
+Creating project 'My New Project'...
+✅ Created project with ID: abc-123
+
+Initializing project locally...
+✅ Project 'My New Project' is ready!
+   Location: ./my-new-project
+
+Next steps:
+  cd ./my-new-project
+  # Start working on your project!
+```
+
+### Pull Existing Project
+
+Clone an existing project repository and set it up locally:
+
+```bash
+# Pull by project ID
+oryxforge admin pull --projectid "project-id" --userid "your-user-id"
+
+# Specify custom target directory
+oryxforge admin pull --projectid "project-id" --userid "your-user-id" --target ./my-folder
+```
+
+The `pull` command:
+- Clones the GitLab repository to a new folder (default: auto-generated from project name)
+- Sets up `.oryxforge.cfg` configuration file inside the project directory
+- Makes the project ready for local development
+
+**Example:**
+```bash
+# Pull project
+oryxforge admin pull --projectid abc-123 --userid xyz-789
+
+# Output: ✅ Project pulled to: ./project-name
+cd ./project-name
+# Start working!
+```
 
 ## Data Source Management
 
@@ -662,21 +719,20 @@ oryxforge admin status
 ### Create New Project Workflow
 
 ```bash
-# 1. First, create user profile in global config (one-time setup)
-oryxforge admin config profile set --userid "your-user-id" --projectid "temp-project-id"
+# Recommended: Use init to create and set up in one step
+oryxforge admin projects init "Data Analysis Project" --userid "your-user-id"
 
-# 2. Create a new project
-oryxforge admin projects create "Data Analysis Project"
-# Note the project ID returned
+# You'll get a new folder with the project
+cd data-analysis-project
 
-# 3. Set up project directory
-mkdir my-project && cd my-project
-
-# 4. Set profile with the new project ID
-oryxforge admin config profile set --userid "your-user-id" --projectid "new-project-id"
-
-# 5. Verify setup
+# Verify setup
 oryxforge admin status
+
+# Alternative: Create then pull separately
+oryxforge admin projects create "Data Analysis Project" --userid "your-user-id"
+# Note the project ID returned
+oryxforge admin pull --projectid "project-id" --userid "your-user-id"
+cd data-analysis-project
 ```
 
 ### Switch Between Projects
@@ -773,8 +829,9 @@ oryxforge agent chat --help
 
 ### Project Commands
 - `oryxforge admin projects list` - List all projects
-- `oryxforge admin projects create <name>` - Create new project
-- `oryxforge admin pull [--id <id>] [--cwd <path>]` - Pull and activate project
+- `oryxforge admin projects create <name> --userid <id>` - Create new project (DB + GitLab only)
+- `oryxforge admin projects init <name> --userid <id> [--target <path>]` - Create and initialize project locally (recommended)
+- `oryxforge admin pull --projectid <id> --userid <id> [--target <path>]` - Clone existing project repository
 
 ### Source Commands
 - `oryxforge admin sources import <filepath>` - Import data file

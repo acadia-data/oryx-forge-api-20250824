@@ -123,78 +123,99 @@ def list_projects():
 
 @projects.command('create')
 @click.argument('name')
+@click.option('--userid', required=True, help='User ID')
 @handle_errors
-def create_project(name: str):
+def create_project(name: str, userid: str):
     """
-    Create a new project.
+    Create a new project (no profile required).
 
     Args:
         name: Project name (must be unique for user)
+        userid: User ID from Supabase auth.users table
     """
-    cli_service = CLIService()
-    project_id = cli_service.projects_create(name)
+    # Call ProjectService.create_project directly (classmethod, no profile needed)
+    project_id = ProjectService.create_project(name, userid, setup_repo=True)
     click.echo(f"✅ Created project '{name}' with ID: {project_id}")
+    click.echo(f"\nNext steps:")
+    click.echo(f"  1. Pull project: oryxforge admin pull --projectid {project_id} --userid {userid}")
+    click.echo(f"  OR use 'init' to create and pull in one step:")
+    click.echo(f"     oryxforge admin projects init '{name}' --userid {userid}")
+
+
+@projects.command('init')
+@click.argument('name')
+@click.option('--userid', required=True, help='User ID')
+@click.option('--target', help='Target directory (default: auto-generate from project name)')
+@handle_errors
+def init_project(name: str, userid: str, target: Optional[str]):
+    """
+    Create a new project and initialize it locally (create + pull in one step).
+
+    This is the recommended way to set up a new project. It creates the project
+    in the database, creates the GitLab repository, clones it locally, and sets
+    up the configuration file.
+
+    Args:
+        name: Project name (must be unique for user)
+        userid: User UUID (from Supabase auth.users table)
+        target: Optional target directory (default: auto-generate from project name)
+
+    Examples:
+        oryxforge admin projects init "My Project" --userid <user-id>
+        oryxforge admin projects init "My Project" --userid <user-id> --target ./my-folder
+    """
+    # Step 1: Create project in DB + GitLab
+    click.echo(f"Creating project '{name}'...")
+    project_id = ProjectService.create_project(name, userid, setup_repo=True)
+    click.echo(f"✅ Created project with ID: {project_id}")
+
+    # Step 2: Initialize locally (clone + config)
+    click.echo(f"\nInitializing project locally...")
+    target_dir = ProjectService.project_init(
+        project_id=project_id,
+        user_id=userid,
+        target_dir=target
+    )
+
+    click.echo(f"\n✅ Project '{name}' is ready!")
+    click.echo(f"   Location: {target_dir}")
+    click.echo(f"\nNext steps:")
+    click.echo(f"  cd {target_dir}")
+    click.echo(f"  # Start working on your project!")
 
 
 @admin.command('pull')
-@click.option('--id', 'project_id', help='Project ID to pull')
-@click.option('--cwd', 'target_dir', default='.', help='Target directory (default: current directory)')
+@click.option('--projectid', required=True, help='Project ID to pull')
+@click.option('--userid', required=True, help='User ID')
+@click.option('--target', help='Target directory (default: auto-generate from project name)')
 @handle_errors
-def pull_project(project_id: Optional[str], target_dir: str):
+def pull_project(projectid: str, userid: str, target: Optional[str]):
     """
-    Pull project and activate it locally.
+    Pull/clone a project repository and set up local config.
 
-    If project ID is not provided, shows interactive project selection.
+    Creates a new directory for the project, clones the repository, and sets up
+    the .oryxforge.cfg file inside the project directory.
+
+    Args:
+        projectid: Project UUID to pull
+        userid: User UUID (from Supabase auth.users table)
+        target: Optional target directory (default: auto-generate from project name)
+
+    Examples:
+        oryxforge admin pull --projectid <project-id> --userid <user-id>
+        oryxforge admin pull --projectid <project-id> --userid <user-id> --target ./my-folder
     """
-    cli_service = CLIService()
+    # Use project_init workflow
+    target_dir = ProjectService.project_init(
+        project_id=projectid,
+        user_id=userid,
+        target_dir=target
+    )
 
-    # Get project ID interactively if not provided
-    if not project_id:
-        click.echo("No project ID provided. Please select from available projects:")
-        project_id = cli_service.interactive_project_select()
-
-    # Validate project exists
-    if not cli_service.project_exists(project_id):
-        raise ValueError(f"Project {project_id} not found or access denied")
-
-    # Initialize project service (uses CredentialsManager from current directory)
-    project_service = ProjectService(project_id=project_id, user_id=cli_service.user_id)
-
-    # Check if project is initialized, initialize if needed
-    if not project_service.is_initialized():
-        click.echo("Project not initialized. Initializing...")
-        project_service.project_init()
-
-    # Pull git repository
-    target_path = Path(target_dir).resolve()
-    project_service.git_pull(str(target_path))
-
-    # Change to target directory for activation
-    original_cwd = Path.cwd()
-    os.chdir(target_path)
-
-    try:
-        # Activate project
- 
-        # Auto-activate default dataset and first sheet
-        try:
-            default_dataset_id = project_service._get_default_dataset_id()
-            cli_service_in_project.dataset_activate(default_dataset_id)
-            click.echo(f"✅ Activated default dataset: exploration")
-
-            # Get first sheet in default dataset
-            first_sheet_id = project_service.get_first_sheet_id(default_dataset_id)
-            cli_service_in_project.sheet_activate(first_sheet_id)
-            click.echo(f"✅ Activated first datasheet")
-
-        except ValueError as e:
-            click.echo(f"⚠️  Warning: Could not auto-activate dataset/sheet: {str(e)}")
-
-        click.echo(f"✅ Project pulled and activated in: {target_path}")
-
-    finally:
-        # Restore original working directory
-        os.chdir(original_cwd)
+    click.echo(f"✅ Project pulled to: {target_dir}")
+    click.echo(f"\nNext steps:")
+    click.echo(f"  cd {target_dir}")
+    click.echo(f"  # Start working on your project!")
 
 
 @admin.group()

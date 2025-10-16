@@ -9,6 +9,7 @@ from ..services.io_service import IOService
 from ..services.project_service import ProjectService
 from ..services.iam import CredentialsManager
 from ..services.utils import init_supabase_client
+from .test_config import TEST_USER_ID, TEST_PROJECT_ID
 
 try:
     import plotly.graph_objects as go
@@ -20,7 +21,8 @@ except ImportError:
 class TestIOService:
     """Test cases for IOService core functionality."""
 
-    USER_ID = '24d811e2-1801-4208-8030-a86abbda59b8'
+    USER_ID = TEST_USER_ID
+    PROJECT_ID = TEST_PROJECT_ID
 
     # Track created resources for cleanup
     created_datasets = []
@@ -79,14 +81,9 @@ class TestIOService:
         return init_supabase_client()
 
     @pytest.fixture(scope="class")
-    def test_project_id(self, supabase_client):
-        """Find test project for integration tests."""
-        response = supabase_client.table("projects").select("id").eq("user_owner", self.USER_ID).limit(1).execute()
-
-        if response.data:
-            return response.data[0]['id']
-
-        return None
+    def test_project_id(self):
+        """Return the configured test project ID."""
+        return self.PROJECT_ID
 
     @pytest.fixture
     def temp_working_dir(self):
@@ -97,9 +94,6 @@ class TestIOService:
     @pytest.fixture
     def io_service(self, test_project_id, temp_working_dir):
         """Create IOService instance for testing."""
-        if not test_project_id:
-            pytest.skip("No test project available - please create a project for user 24d811e2-1801-4208-8030-a86abbda59b8")
-
         # Set up project context with temp directory
         from ..services.env_config import ProjectContext
         ProjectContext.set(user_id=self.USER_ID, project_id=test_project_id, working_dir=temp_working_dir)

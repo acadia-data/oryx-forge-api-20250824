@@ -166,6 +166,50 @@ class ProjectService:
                 raise ValueError(f"Project '{name}' already exists for this user")
             raise ValueError(f"Failed to create project: {str(e)}")
 
+    @classmethod
+    def project_init(cls, project_id: str, user_id: str, target_dir: str = None) -> str:
+        """
+        Initialize project locally: clone repo and set up config.
+
+        This is the recommended way to set up a project locally for both CLI and API.
+        Order of operations: create directory → clone repo → write config.
+
+        Args:
+            project_id: Project UUID
+            user_id: User UUID
+            target_dir: Target directory (if None, auto-generate from project name)
+
+        Returns:
+            str: Path to initialized project directory
+
+        Raises:
+            ValueError: If initialization fails
+        """
+        from .env_config import ProjectContext
+
+        # Get project data to determine folder name if needed
+        supabase_client = init_supabase_client()
+        project_data = get_project_data(supabase_client, project_id, user_id, fields="name,name_git")
+
+        # Determine target directory
+        if target_dir is None:
+            # Auto-generate: ./name_git/
+            project_folder = project_data['name_git']
+            target_dir = str(Path.cwd() / project_folder)
+
+        # Set context WITHOUT writing config (directory will be empty for clone)
+        ProjectContext.set(user_id, project_id, working_dir=target_dir, write_config=False)
+
+        # Clone repository
+        repo_service = RepoService(project_id=project_id, user_id=user_id, working_dir=target_dir)
+        repo_service.clone()
+
+        # NOW write config (after clone completes)
+        ProjectContext.write_config(user_id, project_id, target_dir)
+
+        logger.success(f"Initialized project at {target_dir}")
+        return target_dir
+
     def ds_list(self) -> List[Dict[str, str]]:
         """List all datasets for the current project.
 

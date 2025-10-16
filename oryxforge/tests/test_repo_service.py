@@ -10,13 +10,15 @@ import pygit2
 from ..services.repo_service import RepoService
 from ..services.project_service import ProjectService
 from ..services.utils import init_supabase_client
+from .test_config import TEST_USER_ID, TEST_PROJECT_ID, TEST_PROJECT_NAME_GIT
 
 
 class TestRepoService:
     """Integration test cases for RepoService - no mocks, real GitLab API."""
 
-    USER_ID = '24d811e2-1801-4208-8030-a86abbda59b8'
-    TEST_PROJECT_NAME_GIT = "oryx-forge-test-repo"  # Fixed test repo name
+    USER_ID = TEST_USER_ID
+    PROJECT_ID = TEST_PROJECT_ID
+    TEST_PROJECT_NAME_GIT = TEST_PROJECT_NAME_GIT
 
     @pytest.fixture(scope="class")
     def supabase_client(self):
@@ -24,28 +26,9 @@ class TestRepoService:
         return init_supabase_client()
 
     @pytest.fixture(scope="class")
-    def test_project_id(self, supabase_client):
-        """Find or create test project with name_git field."""
-        # Look for existing test project
-        response = (
-            supabase_client.table("projects")
-            .select("*")
-            .eq("user_owner", self.USER_ID)
-            .eq("name_git", self.TEST_PROJECT_NAME_GIT)
-            .execute()
-        )
-
-        if response.data:
-            return response.data[0]['id']
-
-        # Create test project if not exists
-        project_data = {
-            "name": "Test Repo Project",
-            "name_git": self.TEST_PROJECT_NAME_GIT,
-            "user_owner": self.USER_ID
-        }
-        response = supabase_client.table("projects").insert(project_data).execute()
-        return response.data[0]['id']
+    def test_project_id(self):
+        """Return the configured test project ID."""
+        return self.PROJECT_ID
 
     @pytest.fixture
     def temp_working_dir(self):

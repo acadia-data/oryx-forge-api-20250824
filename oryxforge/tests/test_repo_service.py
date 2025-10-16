@@ -56,7 +56,7 @@ class TestRepoService:
     @pytest.fixture
     def repo_service(self, test_project_id, temp_working_dir):
         """Create RepoService instance for integration testing."""
-        return RepoService(test_project_id, str(temp_working_dir))
+        return RepoService(project_id=test_project_id, user_id=self.USER_ID, working_dir=str(temp_working_dir))
 
     def test_create_repo_idempotent(self, repo_service):
         """Test repository creation is idempotent - real GitLab API."""
@@ -198,7 +198,7 @@ class TestRepoService:
     def test_clone_nonexistent_repo(self, temp_working_dir):
         """Test cloning non-existent repository fails gracefully."""
         # Create service with non-existent project
-        fake_service = RepoService("00000000-0000-0000-0000-000000000000", str(temp_working_dir))
+        fake_service = RepoService(project_id="00000000-0000-0000-0000-000000000000", user_id=self.USER_ID, working_dir=str(temp_working_dir))
 
         with pytest.raises(ValueError, match="Project .* not found"):
             fake_service.clone()
@@ -266,7 +266,7 @@ class TestRepoService:
 
     def test_invalid_project_id(self, temp_working_dir):
         """Test error handling with invalid project ID."""
-        repo_service = RepoService("00000000-0000-0000-0000-000000000000", str(temp_working_dir))
+        repo_service = RepoService(project_id="00000000-0000-0000-0000-000000000000", user_id=self.USER_ID, working_dir=str(temp_working_dir))
 
         with pytest.raises(ValueError, match="Project .* not found"):
             repo_service.create_repo()

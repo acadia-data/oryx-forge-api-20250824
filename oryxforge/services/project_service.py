@@ -15,7 +15,7 @@ from supabase import Client
 from loguru import logger
 from .workflow_service import WorkflowService
 from .repo_service import RepoService
-from .utils import init_supabase_client
+from .utils import init_supabase_client, get_project_data
 from .iam import CredentialsManager
 from .config_service import ConfigService
 
@@ -99,17 +99,13 @@ class ProjectService:
     def _validate_project(self) -> None:
         """Validate that project exists and belongs to user."""
         try:
-            response = (
-                self.supabase_client.table("projects")
-                .select("id, name")
-                .eq("id", self.project_id)
-                .eq("user_owner", self.user_id)
-                .execute()
+            project_data = get_project_data(
+                self.supabase_client,
+                self.project_id,
+                self.user_id,
+                fields="id, name"
             )
-            if not response.data:
-                raise ValueError(f"Project {self.project_id} not found or access denied")
-
-            self.project_name = response.data[0]['name']
+            self.project_name = project_data['name']
             logger.debug(f"Validated project: {self.project_name}")
 
         except Exception as e:
@@ -153,7 +149,7 @@ class ProjectService:
             # Optionally create GitLab repository
             if setup_repo:
                 try:
-                    repo_service = RepoService(project_id, str(Path.cwd()))
+                    repo_service = RepoService(project_id=project_id, user_id=user_id, working_dir=str(Path.cwd()))
                     created = repo_service.create_repo()
                     if created:
                         logger.success(f"Created GitLab repository for project '{name}'")
@@ -569,7 +565,8 @@ class ProjectService:
             ValueError: If git operations fail
         """
         try:
-            repo_service = RepoService(self.project_id, str(Path.cwd()))
+            # RepoService will get credentials from same working_dir as ProjectService
+            repo_service = RepoService(working_dir=self.working_dir)
 
             # Ensure repo exists locally (clone if needed, pull if exists)
             repo_path = repo_service.ensure_repo()
@@ -638,8 +635,8 @@ class ProjectService:
                 return False
 
             # Check if GitLab repository exists
-            repo_service = RepoService(self.project_id, str(Path.cwd()))
-            return repo_service.repo_exists()
+            repo_service = RepoService(working_dir=self.working_dir)
+            return repo_service.repo_exists_locally()
         except Exception:
             return False
 

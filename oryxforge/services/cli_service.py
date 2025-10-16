@@ -375,7 +375,7 @@ class CLIService:
             raise ValueError(f"Project {project_id} not found or access denied")
 
         try:
-            repo_service = RepoService(project_id, str(self.cwd))
+            repo_service = RepoService(project_id=project_id, user_id=self.user_id, working_dir=str(self.cwd))
             commit_hash = repo_service.push(message)
             logger.success(f"Changes pushed successfully: {commit_hash}")
             return commit_hash
@@ -402,7 +402,7 @@ class CLIService:
             raise ValueError(f"Project {project_id} not found or access denied")
 
         try:
-            repo_service = RepoService(project_id, str(self.cwd))
+            repo_service = RepoService(project_id=project_id, user_id=self.user_id, working_dir=str(self.cwd))
             repo_service.pull()
             logger.success("Repository updated successfully")
         except Exception as e:
@@ -431,7 +431,7 @@ class CLIService:
             raise ValueError(f"Project {project_id} not found or access denied")
 
         try:
-            repo_service = RepoService(project_id, str(self.cwd))
+            repo_service = RepoService(project_id=project_id, user_id=self.user_id, working_dir=str(self.cwd))
 
             status = {
                 'exists_locally': repo_service.repo_exists_locally(),
@@ -467,7 +467,7 @@ class CLIService:
             project_service = ProjectService(project_id, self.user_id)
 
             # Create repo service with target directory
-            repo_service = RepoService(project_id, str(target_dir))
+            repo_service = RepoService(project_id=project_id, user_id=self.user_id, working_dir=str(target_dir))
 
             # Ensure repository exists locally (clone if missing, pull if exists)
             repo_path = repo_service.ensure_repo()

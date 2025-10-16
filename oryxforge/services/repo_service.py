@@ -8,7 +8,8 @@ import pygit2
 import gitlab
 import adtiam
 from loguru import logger
-from .utils import init_supabase_client
+from .utils import init_supabase_client, get_project_data
+from .iam import CredentialsManager
 
 
 class RepoService:
@@ -16,16 +17,46 @@ class RepoService:
     Service class for GitLab repository operations and git management.
     """
 
-    def __init__(self, project_id: str, cwd: str = '.'):
+    def __init__(
+        self,
+        project_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        working_dir: Optional[str] = None
+    ):
         """
         Initialize RepoService for a specific project.
 
+        Gets user_id and project_id from CredentialsManager if not provided.
+
         Args:
-            project_id: Supabase project ID
-            cwd: Current working directory (default: '.')
+            project_id: Project ID (if None, read from profile)
+            user_id: User ID (if None, read from profile)
+            working_dir: Working directory (if None, get from ProjectContext)
+
+        Raises:
+            ValueError: If project doesn't exist or profile is not configured
         """
-        self.project_id = project_id
-        self.cwd = Path(cwd).resolve()
+        # Get working_dir from ProjectContext if not provided
+        if working_dir is None:
+            from .env_config import ProjectContext
+            self.working_dir = ProjectContext.get()
+        else:
+            self.working_dir = working_dir
+
+        # Convert to Path for git operations
+        self.cwd = Path(self.working_dir).resolve()
+
+        # Get profile from CredentialsManager if not provided
+        if project_id is None or user_id is None:
+            creds_manager = CredentialsManager(working_dir=self.working_dir)
+            profile = creds_manager.get_profile()
+            self.project_id = project_id or profile['project_id']
+            self.user_id = user_id or profile['user_id']
+        else:
+            self.project_id = project_id
+            self.user_id = user_id
+
+        # Initialize clients
         self.supabase_client = init_supabase_client()
         self._gitlab_client = None
         self._project_data = None
@@ -54,7 +85,7 @@ class RepoService:
             gitlab_project_data = {
                 'name': repo_name,
                 'visibility': 'private',
-                'namespace_id': self._get_namespace_id(),
+                'namespace_id': self._namespace_id,
                 'import_url': f'https://gitlab-ci-token:{self._get_gitlab_token()}@gitlab.com/oryx-forge/d6tflow-template-minimal.git'
             }
 
@@ -266,7 +297,7 @@ class RepoService:
             repo_name = project_data['name_git']
 
             gl = self._get_gitlab_client()
-            namespace_id = self._get_namespace_id()
+            namespace_id = self._namespace_id
 
             # Search for project by name in the namespace
             projects = gl.projects.list(search=repo_name, namespace_id=namespace_id)
@@ -293,12 +324,12 @@ class RepoService:
             ValueError: If project not found
         """
         if not self._project_data:
-            response = self.supabase_client.table("projects").select("*").eq("id", self.project_id).execute()
-
-            if not response.data:
-                raise ValueError(f"Project {self.project_id} not found")
-
-            self._project_data = response.data[0]
+            self._project_data = get_project_data(
+                self.supabase_client,
+                self.project_id,
+                self.user_id,
+                fields="*"
+            )
 
         return self._project_data
 
@@ -317,20 +348,23 @@ class RepoService:
 
     def _get_gitlab_token(self) -> str:
         """
-        Get GitLab personal access token from adtiam.
+        Get GitLab personal access token from adtiam (cached).
 
         Returns:
             str: GitLab token
         """
-        try:
-            adtiam.load_creds('adt-devops')
-            return adtiam.creds['devops']['gitlab']['pat']
-        except Exception as e:
-            raise ValueError(f"Failed to load GitLab credentials: {str(e)}")
+        if not hasattr(self, '_gitlab_token'):
+            try:
+                adtiam.load_creds('adt-devops')
+                self._gitlab_token = adtiam.creds['devops']['gitlab']['pat']
+            except Exception as e:
+                raise ValueError(f"Failed to load GitLab credentials: {str(e)}")
+        return self._gitlab_token
 
-    def _get_namespace_id(self) -> int:
+    @property
+    def _namespace_id(self) -> int:
         """
-        Get GitLab namespace ID based on environment.
+        GitLab namespace ID based on environment.
 
         Returns:
             int: Namespace ID

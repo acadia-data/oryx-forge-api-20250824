@@ -61,7 +61,12 @@ class ProjectContext:
                 working_dir = f"/tmp/{user_id}/{project_id}"
             else:
                 # Local API development
-                api_base = os.environ.get('ORYX_MOUNT_ROOT', '.')
+                api_base = os.environ.get('ORYX_MOUNT_ROOT')
+                if not api_base:
+                    raise ValueError(
+                        "ORYX_MOUNT_ROOT environment variable must be set when running in local API mode. "
+                        "Example: export ORYX_MOUNT_ROOT=/path/to/project/root"
+                    )
                 working_dir = f"{api_base}/mnt/projects/{user_id}/{project_id}"
         else:
             # CLI mode - use current directory
@@ -133,7 +138,12 @@ class ProjectContext:
             if os.environ.get('GOOGLE_CLOUD_PROJECT'):
                 mount_point = f"/mnt/data/{user_id}/{project_id}"
             else:
-                api_base = os.environ.get('ORYX_MOUNT_ROOT', '.')
+                api_base = os.environ.get('ORYX_MOUNT_ROOT')
+                if not api_base:
+                    raise ValueError(
+                        "ORYX_MOUNT_ROOT environment variable must be set when running in local API mode. "
+                        "Example: export ORYX_MOUNT_ROOT=/path/to/project/root"
+                    )
                 mount_point = f"{api_base}/mnt/data/{user_id}/{project_id}"
 
             config_service.set('mount', 'mount_point', mount_point)

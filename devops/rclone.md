@@ -85,6 +85,10 @@ Stop-Process -Name rclone -Force
 
 ## gcp cloud run
 
+gcloud run deploy utest-fastapi-20250823 --source . --region us-central1 --allow-unauthenticated  --set-env-vars GOOGLE_CLOUD_PROJECT=adt-dev-414714 --project=adt-dev-414714 --execution-environment=gen2   --add-volume='name=oryx-forge-api-data,type=cloud-storage,bucket=orxy-forge-datasets-dev' --add-volume-mount='volume=oryx-forge-api-data,mount-path=/mnt/data'
+
+# rclone apparently doesn't work
+
 Application Default Credentials (ADC) on GCP
 When no other source of credentials is provided, rclone will fall back to Application Default Credentials. This is useful both when you already have configured authentication for your developer account, or in production when running on a Google compute host GitHubRclone.
 This means on Cloud Run, Compute Engine, GKE, or any GCP service with an attached service account, rclone can automatically use the instance's service account credentials.

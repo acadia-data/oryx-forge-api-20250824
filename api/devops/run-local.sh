@@ -7,7 +7,15 @@ cd api
 $env:ORYX_MOUNT_ROOT="D:/data/oryx-forge-api/"
 uvicorn app:app --reload
 
+# simulate deploy
+cd api
+uv venv C:\venvs\oryx-forge-api
+C:\venvs\oryx-forge-api\Scripts\activate
+C:\venvs\oryx-forge-api\Scripts\Activate.ps1
 uv pip install -r requirements.txt
-# has an issue with hardlinking, maybe poetry is better?
-uv run uvicorn app:app --reload
-uv run uvicorn app:app
+uv pip install --no-cache --force-reinstall --no-deps https://storage.googleapis.com/adt-devops-pypi/packages/oryxforge-25.9.8-py3-none-any.whl
+uv pip install --force-reinstall --no-cache -r requirements.txt
+$env:ORYX_MOUNT_ROOT="D:/data/oryx-forge-api/"
+uvicorn app:app --reload
+
+

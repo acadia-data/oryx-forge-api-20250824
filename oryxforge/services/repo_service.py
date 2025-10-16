@@ -44,7 +44,7 @@ class RepoService:
             self.working_dir = working_dir
 
         # Convert to Path for git operations
-        self.cwd = Path(self.working_dir).resolve()
+        self.working_dir_abspath = Path(self.working_dir).resolve()
 
         # Get profile from CredentialsManager if not provided
         if project_id is None or user_id is None:
@@ -86,7 +86,7 @@ class RepoService:
                 'name': repo_name,
                 'visibility': 'private',
                 'namespace_id': self._namespace_id,
-                'import_url': f'https://gitlab-ci-token:{self._get_gitlab_token()}@gitlab.com/oryx-forge/d6tflow-template-minimal.git'
+                'import_url': f'https://gitlab-ci-token:{self._get_gitlab_token()}@gitlab.com/oryx-forge/oryx-forge-template-20250923.git'
             }
 
             logger.debug(f"Creating GitLab project: {gitlab_project_data}")
@@ -97,6 +97,16 @@ class RepoService:
 
             logger.success(f"Created GitLab project: {gitlab_project.name} (ID: {gitlab_project.id})")
             logger.debug(f"Project namespace: {gitlab_project.namespace['full_path']}")
+
+            # Save git_path to database
+            git_path = gitlab_project.path_with_namespace
+            self.supabase_client.table("projects").update({
+                "git_path": git_path
+            }).eq("id", self.project_id).execute()
+            logger.debug(f"Saved git_path to database: {git_path}")
+
+            # Invalidate cached project data so it gets refreshed
+            self._project_data = None
 
             return True
 
@@ -125,17 +135,20 @@ class RepoService:
         try:
             # Get project data and construct URL
             project_data = self._get_project_data()
-            repo_name = project_data['name_git']
+            git_path = project_data.get('git_path')
 
-            # Construct repository URL with authentication
+            if not git_path:
+                raise ValueError("Project does not have a GitLab repository (git_path is empty). Create repository first.")
+
+            # Construct repository URL with authentication using git_path
             token = self._get_gitlab_token()
-            project_url = f"https://gitlab-ci-token:{token}@gitlab.com/oryx-forge/{repo_name}.git"
+            project_url = f"https://gitlab-ci-token:{token}@gitlab.com/{git_path}.git"
 
             # Determine target path
             if target_path:
                 clone_path = Path(target_path)
             else:
-                clone_path = self.cwd
+                clone_path = self.working_dir_abspath
 
             # Ensure parent directory exists
             clone_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,7 +179,7 @@ class RepoService:
             if self.repo_exists_locally():
                 logger.info("Repository exists locally, pulling latest changes")
                 self.pull()
-                return str(self.cwd)
+                return str(self.working_dir_abspath)
             else:
                 logger.info("Repository not found locally, cloning")
                 return self.clone()
@@ -185,7 +198,7 @@ class RepoService:
             if not self.repo_exists_locally():
                 raise ValueError("No local repository found. Use clone() or ensure_repo() first.")
 
-            git_dir = self.cwd / ".git"
+            git_dir = self.working_dir_abspath / ".git"
             repo = pygit2.Repository(str(git_dir))
 
             # Get the remote and fetch
@@ -229,11 +242,11 @@ class RepoService:
             if not self.repo_exists_locally():
                 raise ValueError("No local repository found. Use clone() or ensure_repo() first.")
 
-            git_dir = self.cwd / ".git"
+            git_dir = self.working_dir_abspath / ".git"
             repo = pygit2.Repository(str(git_dir))
 
             # Create a temporary file to ensure there are changes
-            tmp_file = self.cwd / 'tmp.txt'
+            tmp_file = self.working_dir_abspath / 'tmp.txt'
             with open(tmp_file, 'a', encoding='utf-8') as f:
                 f.write(f'{time.time()}\n')
 
@@ -243,7 +256,7 @@ class RepoService:
             index.write()
 
             # Create commit
-            author = pygit2.Signature("CI Bot", "ci@oryx.dev")
+            author = pygit2.Signature("OryxForge", "dev@oryxintel.com")
             tree = index.write_tree()
             commit_id = repo.create_commit('HEAD', author, author, message, tree, [repo.head.target])
 
@@ -269,14 +282,18 @@ class RepoService:
             bool: True if valid repo exists
         """
         try:
-            git_dir = self.cwd / ".git"
+            git_dir = self.working_dir_abspath / ".git"
             if not git_dir.exists():
                 return False
 
             repo = pygit2.Repository(str(git_dir))
-            origin = repo.remotes.get("origin")
 
-            if origin and "oryx-forge/" in origin.url:
+            # Check if origin remote exists
+            if "origin" not in repo.remotes:
+                return False
+
+            origin = repo.remotes["origin"]
+            if "oryx-forge/" in origin.url:
                 return True
             return False
 
@@ -287,27 +304,17 @@ class RepoService:
 
     def _repo_exists_on_gitlab(self) -> bool:
         """
-        Check if repository exists on GitLab by name.
+        Check if repository exists on GitLab by checking git_path field in database.
 
         Returns:
-            bool: True if repo exists on GitLab
+            bool: True if repo exists on GitLab (git_path is populated)
         """
         try:
             project_data = self._get_project_data()
-            repo_name = project_data['name_git']
+            git_path = project_data.get('git_path')
 
-            gl = self._get_gitlab_client()
-            namespace_id = self._namespace_id
-
-            # Search for project by name in the namespace
-            projects = gl.projects.list(search=repo_name, namespace_id=namespace_id)
-
-            # Check if exact match exists
-            for project in projects:
-                if project.name == repo_name:
-                    return True
-
-            return False
+            # If git_path is populated, repo exists on GitLab
+            return git_path is not None and git_path != ''
 
         except Exception as e:
             logger.warning(f"Failed to check GitLab repository existence: {str(e)}")
@@ -371,3 +378,5 @@ class RepoService:
         """
         cfg_env = os.getenv('CFG_ENV', 'prod')
         return 115926998 if cfg_env == 'utest' else 115926811
+        # 115926998: https://gitlab.com/oryx-forge/utest-projects
+        # 115926811: https://gitlab.com/groups/oryx-forge/projects/-/edit

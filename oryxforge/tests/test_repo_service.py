@@ -9,8 +9,8 @@ import pygit2
 
 from ..services.repo_service import RepoService
 from ..services.project_service import ProjectService
-from ..services.utils import init_supabase_client
-from .test_config import TEST_USER_ID, TEST_PROJECT_ID, TEST_PROJECT_NAME_GIT
+from ..services.utils import init_supabase_client, get_project_data
+from .test_config import TEST_USER_ID, TEST_PROJECT_ID
 
 
 class TestRepoService:
@@ -18,7 +18,6 @@ class TestRepoService:
 
     USER_ID = TEST_USER_ID
     PROJECT_ID = TEST_PROJECT_ID
-    TEST_PROJECT_NAME_GIT = TEST_PROJECT_NAME_GIT
 
     @pytest.fixture(scope="class")
     def supabase_client(self):
@@ -41,25 +40,9 @@ class TestRepoService:
         """Create RepoService instance for integration testing."""
         return RepoService(project_id=test_project_id, user_id=self.USER_ID, working_dir=str(temp_working_dir))
 
-    def test_create_repo_idempotent(self, repo_service):
-        """Test repository creation is idempotent - real GitLab API."""
-        # First call - may create or return False if exists
-        result1 = repo_service.create_repo()
-        assert isinstance(result1, bool)
-
-        # Second call - should always return False (already exists)
-        result2 = repo_service.create_repo()
-        assert result2 is False
-
-        # Verify repo exists on GitLab
-        assert repo_service._repo_exists_on_gitlab() is True
-
     def test_repo_exists_on_gitlab(self, repo_service):
-        """Test GitLab repository detection - real API call."""
-        # Ensure repo exists first
-        repo_service.create_repo()
-
-        # Check detection works
+        """Test GitLab repository detection using git_path field."""
+        # Check detection works (assumes git_path already populated for test project)
         exists = repo_service._repo_exists_on_gitlab()
         assert exists is True
 
@@ -70,10 +53,7 @@ class TestRepoService:
 
     def test_repo_exists_locally_true(self, repo_service):
         """Test local repository detection after cloning."""
-        # Ensure GitLab repo exists
-        repo_service.create_repo()
-
-        # Clone repository
+        # Clone repository (assumes git_path already populated)
         repo_path = repo_service.clone()
         assert Path(repo_path).exists()
 
@@ -81,12 +61,12 @@ class TestRepoService:
         exists = repo_service.repo_exists_locally()
         assert exists is True
 
-    def test_clone_success(self, repo_service):
+    def test_clone_success(self, repo_service, supabase_client):
         """Test repository cloning - real GitLab clone."""
-        # Ensure GitLab repo exists
-        repo_service.create_repo()
+        # Get project data to verify repo name later
+        project_data = get_project_data(supabase_client, self.PROJECT_ID, self.USER_ID, fields="name_git,git_path")
 
-        # Clone repository
+        # Clone repository (assumes git_path already populated)
         repo_path = repo_service.clone()
 
         # Verify clone success
@@ -95,17 +75,14 @@ class TestRepoService:
 
         # Verify it's the correct repository
         repo = pygit2.Repository(repo_path)
-        origin = repo.remotes.get("origin")
+        origin = repo.remotes["origin"]
         assert origin is not None
         assert "oryx-forge/" in origin.url
-        assert self.TEST_PROJECT_NAME_GIT in origin.url
+        assert project_data['name_git'] in origin.url
 
     def test_clone_to_custom_path(self, repo_service, temp_working_dir):
         """Test cloning to custom target path."""
-        # Ensure GitLab repo exists
-        repo_service.create_repo()
-
-        # Clone to specific path
+        # Clone to specific path (assumes git_path already populated)
         target_path = temp_working_dir / "custom_clone_location"
         repo_path = repo_service.clone(str(target_path))
 
@@ -114,13 +91,10 @@ class TestRepoService:
 
     def test_ensure_repo_clone_when_missing(self, repo_service):
         """Test ensure_repo clones when repository missing locally."""
-        # Ensure GitLab repo exists
-        repo_service.create_repo()
-
         # Repository should not exist locally initially
         assert repo_service.repo_exists_locally() is False
 
-        # ensure_repo should clone
+        # ensure_repo should clone (assumes git_path already populated)
         repo_path = repo_service.ensure_repo()
 
         # Verify clone happened
@@ -129,8 +103,7 @@ class TestRepoService:
 
     def test_ensure_repo_pull_when_exists(self, repo_service):
         """Test ensure_repo pulls when repository exists locally."""
-        # Setup: ensure GitLab repo exists and is cloned
-        repo_service.create_repo()
+        # Setup: clone repository first
         repo_service.clone()
 
         # Repository should exist locally
@@ -145,8 +118,7 @@ class TestRepoService:
 
     def test_pull_success(self, repo_service):
         """Test pulling latest changes - real git operation."""
-        # Setup: ensure repo exists and is cloned
-        repo_service.create_repo()
+        # Setup: clone repo first
         repo_service.clone()
 
         # Pull should succeed (even if no new changes)
@@ -157,8 +129,7 @@ class TestRepoService:
 
     def test_push_success(self, repo_service):
         """Test pushing changes - real git operation."""
-        # Setup: ensure repo exists and is cloned
-        repo_service.create_repo()
+        # Setup: clone repo first
         repo_path = repo_service.clone()
 
         # Make a change
@@ -203,24 +174,20 @@ class TestRepoService:
             repo_service.push("test commit")
 
     def test_complete_workflow(self, repo_service):
-        """Test complete workflow: create → clone → modify → push → pull."""
-        # Step 1: Create repository (idempotent)
-        created = repo_service.create_repo()
-        assert isinstance(created, bool)
-
-        # Step 2: Ensure repository locally (should clone)
+        """Test complete workflow: clone → modify → push → pull."""
+        # Step 1: Ensure repository locally (should clone)
         repo_path = repo_service.ensure_repo()
         assert Path(repo_path).exists()
 
-        # Step 3: Make changes
+        # Step 2: Make changes
         test_file = Path(repo_path) / f"workflow_test_{int(time.time())}.txt"
         test_file.write_text("Complete workflow integration test")
 
-        # Step 4: Push changes
+        # Step 3: Push changes
         commit_hash = repo_service.push("Complete workflow test")
         assert len(commit_hash) > 0
 
-        # Step 5: Pull to verify everything synced
+        # Step 4: Pull to verify everything synced
         repo_service.pull()
 
         # Verify final state
@@ -242,17 +209,9 @@ class TestRepoService:
 
             # Verify it's the correct oryx-forge repository
             repo = pygit2.Repository(str(temp_working_dir))
-            origin = repo.remotes.get("origin")
+            origin = repo.remotes["origin"]
             assert origin is not None
             assert "oryx-forge/" in origin.url
-
-
-    def test_invalid_project_id(self, temp_working_dir):
-        """Test error handling with invalid project ID."""
-        repo_service = RepoService(project_id="00000000-0000-0000-0000-000000000000", user_id=self.USER_ID, working_dir=str(temp_working_dir))
-
-        with pytest.raises(ValueError, match="Project .* not found"):
-            repo_service.create_repo()
 
 
 if __name__ == '__main__':

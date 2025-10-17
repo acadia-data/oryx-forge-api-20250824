@@ -11,6 +11,9 @@ from loguru import logger
 # Thread-safe context variable for project working directory
 _project_context: ContextVar[Optional[str]] = ContextVar('project_context', default=None)
 
+# Thread-safe context variable for request initialization tracking
+_request_initialized: ContextVar[bool] = ContextVar('request_initialized', default=False)
+
 
 class ProjectContext:
     """
@@ -32,6 +35,51 @@ class ProjectContext:
                os.environ.get('FASTAPI_ENV') is not None
 
     @staticmethod
+    def get_mount_parent_path(user_id: str = None, project_id: str = None) -> str:
+        """
+        Get the mount parent path for API mode.
+
+        This centralizes the logic for determining mount paths in API mode.
+
+        Args:
+            user_id: User UUID (optional, if provided returns project-specific path)
+            project_id: Project UUID (optional, if provided returns project-specific path)
+
+        Returns:
+            str: Mount parent path
+                - If user_id/project_id provided: Full project path (e.g., /mnt/data/{user}/{project})
+                - If not provided: Parent mount path (e.g., /mnt/data)
+
+        Raises:
+            ValueError: If ORYX_MOUNT_ROOT not set in local API mode
+
+        Examples:
+            >>> ProjectContext.get_mount_parent_path()
+            'D:/data/oryx-forge-api/mnt/data'
+            >>> ProjectContext.get_mount_parent_path(user_id='abc', project_id='xyz')
+            'D:/data/oryx-forge-api/mnt/data/abc/xyz'
+        """
+        if os.environ.get('GOOGLE_CLOUD_PROJECT'):
+            # GCP production
+            base_path = "/mnt/data"
+        else:
+            # Local API development
+            api_base = os.environ.get('ORYX_MOUNT_ROOT')
+            if not api_base:
+                raise ValueError(
+                    "ORYX_MOUNT_ROOT environment variable must be set when running in local API mode. "
+                    "Example: export ORYX_MOUNT_ROOT=/path/to/project/root"
+                )
+            base_path = str(Path(api_base) / "mnt" / "data")
+
+        # If user_id and project_id provided, return full project path
+        if user_id and project_id:
+            return str(Path(base_path) / user_id / project_id)
+
+        # Otherwise return parent mount path
+        return base_path
+
+    @staticmethod
     def set(user_id: str, project_id: str, working_dir: str = None, write_config: bool = True) -> str:
         """
         Set the current project context.
@@ -44,7 +92,7 @@ class ProjectContext:
             project_id: Project UUID
             working_dir: Optional working directory (for tests). If None, auto-detect based on environment.
             write_config: Whether to write .oryxforge.cfg file (default True).
-                         Set to False when cloning repo to avoid non-empty directory issue.
+                         When False, directory is not created (useful before git clone).
 
         Returns:
             str: Working directory that was set
@@ -68,16 +116,15 @@ class ProjectContext:
                         "ORYX_MOUNT_ROOT environment variable must be set when running in local API mode. "
                         "Example: export ORYX_MOUNT_ROOT=/path/to/project/root"
                     )
-                working_dir = f"{api_base}/mnt/projects/{user_id}/{project_id}"
+                working_dir = str(Path(api_base) / "mnt" / "projects" / user_id / project_id)
         else:
             # CLI mode - use current directory
             working_dir = str(Path.cwd())
 
-        # Create directory
-        Path(working_dir).mkdir(parents=True, exist_ok=True)
-
-        # Optionally write configuration file (skip during clone, write after)
+        # Only create directory if we're writing config (need dir to write file)
+        # When write_config=False, directory will be created by git clone
         if write_config:
+            Path(working_dir).mkdir(parents=True, exist_ok=True)
             ProjectContext._init_config(user_id, project_id, working_dir, is_test_mode=is_test_mode)
 
         # Set context variable
@@ -107,6 +154,21 @@ class ProjectContext:
     def clear():
         """Clear the project context."""
         _project_context.set(None)
+        _request_initialized.set(False)
+
+    @staticmethod
+    def mark_initialized():
+        """Mark that request-scoped initialization has been completed."""
+        _request_initialized.set(True)
+
+    @staticmethod
+    def is_initialized() -> bool:
+        """Check if request-scoped initialization has been completed.
+
+        Returns:
+            bool: True if initialization completed for this request
+        """
+        return _request_initialized.get()
 
     @staticmethod
     def write_config(user_id: str, project_id: str, working_dir: str = None) -> None:
@@ -158,16 +220,7 @@ class ProjectContext:
             logger.debug("Test mode: mount_ensure=false")
         elif ProjectContext.is_api_mode():
             # API mode - set mount point and disable auto-mounting
-            if os.environ.get('GOOGLE_CLOUD_PROJECT'):
-                mount_point = f"/mnt/data/{user_id}/{project_id}"
-            else:
-                api_base = os.environ.get('ORYX_MOUNT_ROOT')
-                if not api_base:
-                    raise ValueError(
-                        "ORYX_MOUNT_ROOT environment variable must be set when running in local API mode. "
-                        "Example: export ORYX_MOUNT_ROOT=/path/to/project/root"
-                    )
-                mount_point = f"{api_base}/mnt/data/{user_id}/{project_id}"
+            mount_point = ProjectContext.get_mount_parent_path(user_id, project_id)
 
             config_service.set('mount', 'mount_point', mount_point)
             config_service.set('mount', 'mount_ensure', 'false')

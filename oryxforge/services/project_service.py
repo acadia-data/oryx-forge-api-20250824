@@ -72,21 +72,20 @@ class ProjectService:
         # Determine mount_ensure setting
         if mount_ensure is not None:
             # Use provided parameter (override)
-            mount_ensure_final = mount_ensure
+            self.mount_ensure_final = mount_ensure
         else:
             # Read from [mount] section
             mount_ensure_str = config_service.get('mount', 'mount_ensure')
-            mount_ensure_final = (mount_ensure_str != 'false') if mount_ensure_str else True
+            self.mount_ensure_final = (mount_ensure_str != 'false') if mount_ensure_str else True
 
         # Initialize Supabase client
         self.supabase_client = init_supabase_client()
 
-        # Validate project exists and belongs to user
-        self._validate_project()
-
-        # Ensure data is mounted if configured
-        if mount_ensure_final:
-            self.ensure_mount()
+        # Run request-scoped initialization (once per request)
+        from .env_config import ProjectContext
+        if not ProjectContext.is_initialized():
+            self._ensure_request_initialized()
+            ProjectContext.mark_initialized()
 
     @property
     def mount_point_path(self) -> Path:
@@ -116,6 +115,75 @@ class ProjectService:
 
         except Exception as e:
             raise ValueError(f"Failed to validate project: {str(e)}")
+
+    def _get_mount_check_path(self) -> str:
+        """Get the path to check for mount status based on mode.
+
+        In API mode, we check the parent mount directory since all projects
+        share a common mounted parent. In CLI mode, we check the project-specific
+        mount point.
+
+        Returns:
+            str: Path to check for mount status
+                - API mode: Parent mount path (e.g., D:/data/oryx-forge-api/mnt/data)
+                - CLI mode: Project mount path (e.g., ./data)
+        """
+        from .env_config import ProjectContext
+        if ProjectContext.is_api_mode():
+            # API mode: check parent mount (without user/project subdirs)
+            return ProjectContext.get_mount_parent_path()
+        else:
+            # CLI mode: check project-specific mount
+            return self.mount_point
+
+    def _ensure_request_initialized(self) -> None:
+        """Ensure request-scoped initialization runs exactly once per request.
+
+        This method runs operations that should happen once per request:
+        - Validate project exists and belongs to user
+        - Check mount status at appropriate level (parent for API, project for CLI)
+        - Set d6tflow directory to mount point
+
+        Mount checking behavior:
+        - API mode: Checks parent mount (ORYX_MOUNT_ROOT/mnt/data), warns if not mounted
+        - CLI mode: Checks project mount, attempts to mount if not mounted
+
+        Called from __init__() only if ProjectContext.is_initialized() is False.
+        """
+        from .env_config import ProjectContext
+
+        # Validate project exists and belongs to user
+        self._validate_project()
+
+        # Get appropriate mount check path based on mode
+        mount_check_path = self._get_mount_check_path()
+
+        # Create temporary ProjectService-like object to check mount at specific path
+        # We need to temporarily override mount_point for the check
+        original_mount_point = self.mount_point
+        self.mount_point = mount_check_path
+
+        try:
+            is_mounted = self.is_mounted()
+        finally:
+            # Restore original mount_point
+            self.mount_point = original_mount_point
+
+        if not is_mounted:
+            # Mount is not available - fail fast with clear error
+            mode_desc = "parent mount directory" if ProjectContext.is_api_mode() else "project mount point"
+            raise ValueError(
+                f"Mount check failed: {mode_desc} at '{mount_check_path}' is not mounted. "
+                f"Please ensure the mount is set up before starting the {'API' if ProjectContext.is_api_mode() else 'CLI'}."
+            )
+
+        logger.debug(f"Mount verified at {mount_check_path}")
+
+        # Set d6tflow directory to project mount point (not the check path)
+        import d6tflow
+        d6tflow.set_dir(self.mount_point)
+        logger.debug(f"Set d6tflow directory to {self.mount_point}")
+
 
     @classmethod
     def create_project(cls, name: str, user_id: str, setup_repo: bool = True) -> str:
@@ -178,12 +246,12 @@ class ProjectService:
         Initialize project locally: clone repo and set up config.
 
         This is the recommended way to set up a project locally for both CLI and API.
-        Order of operations: create directory → clone repo → write config.
+        Order of operations: set context (no dir creation) → ensure/clone repo → write config.
 
         Args:
             project_id: Project UUID
             user_id: User UUID
-            target_dir: Target directory (if None, auto-generate from project name)
+            target_dir: Target directory (if None, auto-determine from environment)
 
         Returns:
             str: Path to initialized project directory
@@ -193,7 +261,7 @@ class ProjectService:
         """
         from .env_config import ProjectContext
 
-        # Get project data to determine folder name if needed
+        # Get project data to ensure repo exists on GitLab
         supabase_client = init_supabase_client()
         project_data = get_project_data(supabase_client, project_id, user_id, fields="name,name_git,git_path")
 
@@ -205,24 +273,19 @@ class ProjectService:
             # Refresh project_data to get updated git_path
             project_data = get_project_data(supabase_client, project_id, user_id, fields="name,name_git,git_path")
 
-        # Determine target directory
-        if target_dir is None:
-            # Auto-generate: ./name_git/
-            project_folder = project_data['name_git']
-            target_dir = str(Path.cwd() / project_folder)
+        # Set context WITHOUT writing config and WITHOUT creating directory
+        # ProjectContext.set() will auto-determine working_dir based on environment if target_dir is None
+        working_dir = ProjectContext.set(user_id, project_id, working_dir=target_dir, write_config=False)
 
-        # Set context WITHOUT writing config (directory will be empty for clone)
-        ProjectContext.set(user_id, project_id, working_dir=target_dir, write_config=False)
+        # Ensure repository exists (clone if missing, pull if exists)
+        repo_service = RepoService(project_id=project_id, user_id=user_id, working_dir=working_dir)
+        repo_service.ensure_repo()
 
-        # Clone repository
-        repo_service = RepoService(project_id=project_id, user_id=user_id, working_dir=target_dir)
-        repo_service.clone()
+        # NOW write config (after repo clone/pull completes)
+        ProjectContext.write_config(user_id, project_id, working_dir)
 
-        # NOW write config (after clone completes)
-        ProjectContext.write_config(user_id, project_id, target_dir)
-
-        logger.success(f"Initialized project at {target_dir}")
-        return target_dir
+        logger.success(f"Initialized project at {working_dir}")
+        return working_dir
 
     def ds_list(self) -> List[Dict[str, str]]:
         """List all datasets for the current project.
@@ -1184,9 +1247,6 @@ class ProjectService:
                     f"Please check that rclone is installed and configured correctly."
                 )
 
-        import d6tflow
-        d6tflow.set_dir(self.mount_point)
-
-        logger.success(f"Data directory mounted and initialized successfully at {self.mount_point}")
+        logger.success(f"Data directory mounted successfully at {self.mount_point}")
 
 

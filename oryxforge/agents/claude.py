@@ -133,8 +133,16 @@ class ClaudeAgent:
 
         Raises:
             Exception: If an error occurs during query execution
+
+        Note:
+            After successful query execution, automatically commits and pushes
+            all changes (modified and untracked files) to the git repository
+            with message "edits <UTC timestamp>". Git failures are logged but
+            do not affect query completion.
         """
         import time
+        from datetime import datetime
+        from ..services.repo_service import RepoService
 
         async def _run():
             agent = ClaudeAgent()
@@ -156,6 +164,18 @@ class ClaudeAgent:
         start_time = time.time()
         result = asyncio.run(_run())
         execution_time = time.time() - start_time
+
+        # Auto-commit and push changes after successful query
+        if result:
+            try:
+                repo_service = RepoService()
+                commit_message = f"edits {datetime.utcnow().isoformat()}"
+                commit_hash = repo_service.push(commit_message)
+                logger.success(f"Auto-committed changes: {commit_hash[:8]}")
+            except ValueError as e:
+                logger.warning(f"Git auto-commit failed (non-blocking): {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected git error (non-blocking): {e}")
 
         if verbose and result:
             logger.info(f"Result: {result.result}")

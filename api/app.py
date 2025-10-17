@@ -28,6 +28,31 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Verify mount is available at API startup.
+
+    In API mode, we check that the parent mount directory exists and is accessible.
+    This prevents the API from starting if the mount infrastructure isn't ready.
+    """
+    from oryxforge.services.env_config import ProjectContext
+    from loguru import logger
+
+    # Only check mount in API mode
+    if ProjectContext.is_api_mode():
+        # Get parent mount path using centralized logic
+        mount_parent = ProjectContext.get_mount_parent_path()
+
+        # Check if mount parent exists
+        if not os.path.exists(mount_parent):
+            raise ValueError(
+                f"API startup failed: Parent mount directory '{mount_parent}' does not exist. "
+                f"Please ensure the mount is set up before starting the API."
+            )
+
+        logger.success(f"Mount verified at API startup: {mount_parent}")
+
 # Exception handlers for proper error responses
 @app.exception_handler(ValueError)
 async def value_error_handler(request, exc):
@@ -196,7 +221,7 @@ def get_llm_native_stream(request: PromptRequest):
     
     return StreamingResponse(generate_stream(), media_type="text/plain")
 
-from services.file_service import FileService
+from api.services.file_service import FileService
 
 
 def dataframe_to_spreadsheet_format(df):
@@ -290,20 +315,25 @@ def load_dataframe(request: DataFrameLoadRequest):
     """
     Load a DataFrame from IOService using name_python format (dataset.sheet).
 
-    Sets project context, loads the DataFrame, and returns it in spreadsheet format
-    matching the /files/preview endpoint structure (headers + data arrays).
+    Initializes the project (ensures repo is cloned), then loads and returns
+    the DataFrame in spreadsheet format matching the /files/preview endpoint
+    structure (headers + data arrays).
     """
     from oryxforge.services.io_service import IOService
-    from oryxforge.services.env_config import ProjectContext
+    from oryxforge.services.project_service import ProjectService
 
-    # Set project context - this writes config and sets ContextVar
-    ProjectContext.set(user_id=request.user_id, project_id=request.project_id)
+    # Initialize project: ensures repo exists (clone if new, pull if exists) and config is written
+    # Working directory is auto-determined based on API environment (ORYX_MOUNT_ROOT)
+    ProjectService.project_init(
+        project_id=request.project_id,
+        user_id=request.user_id
+        # target_dir defaults to None - auto-determined by ProjectContext.set()
+    )
 
-    # Create IOService with zero parameters - reads everything from context
+    # Load DataFrame using IOService (now has access to tasks/ directory from cloned repo)
     io_service = IOService()
-
-    # Load DataFrame using name_python (e.g., "sources.sheet1")
     df = io_service.load_df_pd(request.name_python)
+    df = df.head(1000)
 
     # Convert to spreadsheet format (headers + data arrays)
     formatted_data = dataframe_to_spreadsheet_format(df)

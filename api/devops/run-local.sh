@@ -3,9 +3,11 @@
 
 # Set environment variable for local API mount root
 
-cd api
+Start-Process rclone -ArgumentList "mount","oryx-forge-gcs:orxy-forge-datasets-dev","D:/data/oryx-forge-api/mnt/data","--vfs-cache-mode writes" -WindowStyle Hidden
 $env:ORYX_MOUNT_ROOT="D:/data/oryx-forge-api/"
-uvicorn app:app --reload
+uvicorn api.app:app # --reload
+uvicorn app:app # --reload
+Stop-Process -Name rclone -Force
 
 # simulate deploy
 cd api

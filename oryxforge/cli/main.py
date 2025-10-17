@@ -10,40 +10,17 @@ def cli():
     pass
 
 
-# Try to import and add MCP commands if available
-try:
-    from ..tools.mcp_server import mcp
-    cli.add_command(mcp)
-except ImportError:
-    # MCP dependencies not installed, skip MCP commands
-    pass
+# Import and add all command groups (always required)
+from ..tools.mcp_server import mcp
+from .admin import admin, git
+from .agent import agent
+from .dev import dev
 
-
-# Add admin command group
-try:
-    from .admin import admin
-    cli.add_command(admin)
-except ImportError:
-    # Admin dependencies not installed, skip admin commands
-    pass
-
-
-# Add agent command group
-try:
-    from .agent import agent
-    cli.add_command(agent)
-except ImportError:
-    # Agent dependencies not installed, skip agent commands
-    pass
-
-
-# Add dev command group
-try:
-    from .dev import dev
-    cli.add_command(dev)
-except ImportError:
-    # Dev dependencies not installed, skip dev commands
-    pass
+cli.add_command(mcp)
+cli.add_command(admin)
+cli.add_command(agent)
+cli.add_command(dev)
+cli.add_command(git)
 
 
 # Add other command groups here as they're developed

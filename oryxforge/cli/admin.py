@@ -776,5 +776,87 @@ def unmount_project():
         raise click.Abort()
 
 
+# Git command group (separate from admin, accessible as 'oryxforge git')
+@click.group()
+def git():
+    """Git repository management commands."""
+    pass
+
+
+@git.command('push')
+@click.option('--message', '-m', help='Commit message (default: edits <timestamp>)')
+@handle_errors
+def push_command(message: str = None):
+    """
+    Commit and push all changes (modified and untracked) to remote repository.
+
+    Stages all changes (modified files, new files, and deletions), creates a commit,
+    and pushes to the remote GitLab repository.
+
+    Equivalent to: git add -A && git commit -m <message> && git push
+
+    Args:
+        message: Optional commit message. If not provided, defaults to "edits <UTC timestamp>"
+
+    Examples:
+        # Push with auto-generated timestamp message
+        oryxforge git push
+
+        # Push with custom message
+        oryxforge git push -m "Updated analysis"
+        oryxforge git push --message "Fixed bug in data processing"
+
+    Prerequisites:
+        - Must be run from within a project directory
+        - Project must be configured with .oryxforge.cfg
+        - Git repository must exist (created via 'oryxforge admin projects init')
+    """
+    from datetime import datetime
+    from ..services.repo_service import RepoService
+
+    # Default message with UTC timestamp
+    if not message:
+        message = f"edits {datetime.utcnow().isoformat()}"
+
+    repo_service = RepoService()
+    commit_hash = repo_service.push(message)
+
+    click.echo(f"✅ Successfully pushed commit: {commit_hash[:8]}")
+    click.echo(f"   Message: {message}")
+
+
+@git.command('pull')
+@handle_errors
+def pull_command():
+    """
+    Pull latest changes from remote repository.
+
+    Fetches changes from the remote GitLab repository and merges them into
+    the current branch (main/master).
+
+    Equivalent to: git pull origin main
+
+    Examples:
+        # Pull latest changes
+        oryxforge git pull
+
+    Prerequisites:
+        - Must be run from within a project directory
+        - Project must be configured with .oryxforge.cfg
+        - Git repository must exist locally
+
+    Note:
+        This performs a fast-forward merge. If there are local uncommitted changes
+        that conflict with remote changes, the pull may fail. Consider committing
+        or stashing local changes first.
+    """
+    from ..services.repo_service import RepoService
+
+    repo_service = RepoService()
+    repo_service.pull()
+
+    click.echo(f"✅ Successfully pulled latest changes")
+
+
 if __name__ == '__main__':
     admin()

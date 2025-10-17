@@ -62,16 +62,23 @@ class TestRepoService:
         assert exists is True
 
     def test_clone_success(self, repo_service, supabase_client):
-        """Test repository cloning - real GitLab clone."""
+        """Test repository cloning - real GitLab clone with content verification."""
         # Get project data to verify repo name later
         project_data = get_project_data(supabase_client, self.PROJECT_ID, self.USER_ID, fields="name_git,git_path")
 
         # Clone repository (assumes git_path already populated)
         repo_path = repo_service.clone()
 
-        # Verify clone success
+        # Verify clone success - basic structure
         assert Path(repo_path).exists()
         assert (Path(repo_path) / '.git').exists()
+
+        # Verify .gitignore exists (standard in all repos)
+        assert (Path(repo_path) / '.gitignore').exists(), ".gitignore not found after clone"
+
+        # Verify Python files were actually cloned (check for any .py files)
+        py_files = list(Path(repo_path).rglob('*.py'))
+        assert len(py_files) > 0, "No Python files found in repository after clone"
 
         # Verify it's the correct repository
         repo = pygit2.Repository(repo_path)
@@ -90,7 +97,7 @@ class TestRepoService:
         assert (target_path / '.git').exists()
 
     def test_ensure_repo_clone_when_missing(self, repo_service):
-        """Test ensure_repo clones when repository missing locally."""
+        """Test ensure_repo clones when repository missing locally with content verification."""
         # Repository should not exist locally initially
         assert repo_service.repo_exists_locally() is False
 
@@ -101,13 +108,24 @@ class TestRepoService:
         assert Path(repo_path).exists()
         assert repo_service.repo_exists_locally() is True
 
+        # Verify .gitignore exists (standard in all repos)
+        assert (Path(repo_path) / '.gitignore').exists(), ".gitignore not found after ensure_repo"
+
+        # Verify Python files were actually cloned
+        py_files = list(Path(repo_path).rglob('*.py'))
+        assert len(py_files) > 0, "No Python files found in repository after ensure_repo"
+
     def test_ensure_repo_pull_when_exists(self, repo_service):
-        """Test ensure_repo pulls when repository exists locally."""
+        """Test ensure_repo pulls when repository exists locally with content verification."""
         # Setup: clone repository first
-        repo_service.clone()
+        repo_path = repo_service.clone()
 
         # Repository should exist locally
         assert repo_service.repo_exists_locally() is True
+
+        # Verify content exists after initial clone
+        initial_py_files = list(Path(repo_path).rglob('*.py'))
+        assert len(initial_py_files) > 0, "No Python files found after initial clone"
 
         # ensure_repo should pull (not clone again)
         repo_path = repo_service.ensure_repo()
@@ -116,16 +134,33 @@ class TestRepoService:
         assert Path(repo_path).exists()
         assert repo_service.repo_exists_locally() is True
 
+        # Verify content still exists after ensure_repo pull
+        py_files_after = list(Path(repo_path).rglob('*.py'))
+        assert len(py_files_after) > 0, "Python files missing after ensure_repo pull"
+        assert (Path(repo_path) / '.gitignore').exists(), ".gitignore missing after pull"
+
     def test_pull_success(self, repo_service):
-        """Test pulling latest changes - real git operation."""
+        """Test pulling latest changes - real git operation with content verification."""
         # Setup: clone repo first
-        repo_service.clone()
+        repo_path = repo_service.clone()
+
+        # Verify initial content exists
+        initial_py_files = list(Path(repo_path).rglob('*.py'))
+        assert len(initial_py_files) > 0, "No Python files found after initial clone"
 
         # Pull should succeed (even if no new changes)
         repo_service.pull()
 
         # Verify repository is still valid
         assert repo_service.repo_exists_locally() is True
+
+        # Verify content still exists after pull
+        py_files_after_pull = list(Path(repo_path).rglob('*.py'))
+        assert len(py_files_after_pull) > 0, "Python files missing after pull"
+        assert len(py_files_after_pull) >= len(initial_py_files), "Files lost during pull operation"
+
+        # Verify .gitignore still exists
+        assert (Path(repo_path) / '.gitignore').exists(), ".gitignore missing after pull"
 
     def test_push_success(self, repo_service):
         """Test pushing changes - real git operation."""
@@ -174,10 +209,15 @@ class TestRepoService:
             repo_service.push("test commit")
 
     def test_complete_workflow(self, repo_service):
-        """Test complete workflow: clone → modify → push → pull."""
+        """Test complete workflow: clone → modify → push → pull with content verification."""
         # Step 1: Ensure repository locally (should clone)
         repo_path = repo_service.ensure_repo()
         assert Path(repo_path).exists()
+
+        # Verify repository content exists after clone
+        py_files = list(Path(repo_path).rglob('*.py'))
+        assert len(py_files) > 0, "No Python files found after ensure_repo"
+        assert (Path(repo_path) / '.gitignore').exists(), ".gitignore not found after clone"
 
         # Step 2: Make changes
         test_file = Path(repo_path) / f"workflow_test_{int(time.time())}.txt"
@@ -190,12 +230,17 @@ class TestRepoService:
         # Step 4: Pull to verify everything synced
         repo_service.pull()
 
-        # Verify final state
+        # Verify final state - both new file and original content
         assert repo_service.repo_exists_locally() is True
         assert test_file.exists()
 
+        # Verify original repository content still intact
+        py_files_final = list(Path(repo_path).rglob('*.py'))
+        assert len(py_files_final) > 0, "Python files missing after complete workflow"
+        assert (Path(repo_path) / '.gitignore').exists(), ".gitignore missing after workflow"
+
     def test_project_service_integration(self, test_project_id, temp_working_dir):
-        """Test ProjectService using RepoService for ensure_repo."""
+        """Test ProjectService using RepoService for ensure_repo with content verification."""
         # Create ProjectService with temp directory
         with patch('pathlib.Path.cwd', return_value=temp_working_dir):
             project_service = ProjectService(test_project_id, self.USER_ID)
@@ -203,9 +248,15 @@ class TestRepoService:
             # Call ensure_repo (should use RepoService internally)
             project_service.ensure_repo()
 
-            # Verify repository was set up
+            # Verify repository was set up with .git directory
             assert (temp_working_dir / '.git').exists()
-            assert (temp_working_dir / '.gitignore').exists()
+
+            # Verify .gitignore exists (standard in all repos)
+            assert (temp_working_dir / '.gitignore').exists(), ".gitignore not found"
+
+            # Verify Python files were actually cloned
+            py_files = list(temp_working_dir.rglob('*.py'))
+            assert len(py_files) > 0, "No Python files found in repository"
 
             # Verify it's the correct oryx-forge repository
             repo = pygit2.Repository(str(temp_working_dir))

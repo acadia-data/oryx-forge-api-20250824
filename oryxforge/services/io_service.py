@@ -728,9 +728,12 @@ class IOService:
             try:
                 flow = d6tflow.Workflow(task=task_class)
                 if not flow.complete(cascade=False):
+                    logger.info(f"d6tflow Running task: {sheet}")
                     flow.run()
+                else:
+                    logger.debug(f"d6tflow already completed: {sheet}")
                 output = flow.outputLoad(task_class)
-                logger.success(f"Successfully loaded task output for {name_python}")
+                logger.success(f"d6tflow successfully loaded task output for {name_python}")
                 return output
             except Exception as e:
                 raise ValueError(

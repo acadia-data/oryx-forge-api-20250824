@@ -279,28 +279,33 @@ class RepoService:
         Check if a valid oryx-forge repository exists in current directory.
 
         Returns:
-            bool: True if valid repo exists
+            bool: True if valid repo exists, False if directory is not a git repo
+
+        Raises:
+            ValueError: If repo exists but is invalid (missing origin or wrong remote)
         """
-        try:
-            git_dir = self.working_dir_abspath / ".git"
-            if not git_dir.exists():
-                return False
+        git_dir = self.working_dir_abspath / ".git"
+        if not git_dir.exists():
+            return False  # Not a git repo, can proceed with clone
 
-            repo = pygit2.Repository(str(git_dir))
+        repo = pygit2.Repository(str(git_dir))
 
-            # Check if origin remote exists
-            if "origin" not in repo.remotes:
-                return False
+        # Check if origin remote exists
+        if "origin" not in list(repo.remotes.names()):
+            raise ValueError(
+                f"Git repository exists at {self.working_dir_abspath} but has no 'origin' remote. "
+                f"Available remotes: {list(repo.remotes.names())}"
+            )
 
-            origin = repo.remotes["origin"]
-            if "oryx-forge/" in origin.url:
-                return True
-            return False
+        origin = repo.remotes["origin"]
+        if "oryx-forge/" not in origin.url:
+            raise ValueError(
+                f"Git repository exists but origin URL doesn't match oryx-forge pattern. "
+                f"Found: {origin.url}"
+            )
 
-        except pygit2.GitError:
-            return False
-        except Exception:
-            return False
+        return True
+
 
     def _repo_exists_on_gitlab(self) -> bool:
         """

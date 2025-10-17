@@ -15,4 +15,4 @@ COPY . .
 # Cloud Run injects a PORT environment variable.
 # Your application must listen on this port.
 # Uvicorn by default listens on 8000, so we pass the PORT from env.
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8080"]

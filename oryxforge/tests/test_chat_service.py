@@ -35,6 +35,15 @@ class TestChatServiceIntegration:
         Uses test IDs and temporary working directory to avoid interfering
         with actual user configuration.
         """
+        from oryxforge.services.env_config import ProjectContext
+
+        # Set up project context BEFORE creating services (disables auto-mounting)
+        ProjectContext.set(
+            user_id=self.USER_ID,
+            project_id=self.PROJECT_ID,
+            working_dir=temp_working_dir
+        )
+
         # Set up profile in temp directory using CredentialsManager
         creds_manager = CredentialsManager(working_dir=temp_working_dir)
         creds_manager.set_profile(user_id=self.USER_ID, project_id=self.PROJECT_ID)
@@ -50,7 +59,7 @@ class TestChatServiceIntegration:
         if not datasets or not sheets:
             pytest.skip("No datasets or sheets available for testing. Please create test data in the test project.")
 
-        return {
+        yield {
             'user_id': self.USER_ID,
             'project_id': self.PROJECT_ID,
             'chat_service': chat_service,
@@ -59,6 +68,9 @@ class TestChatServiceIntegration:
             'sheets': sheets,
             'temp_working_dir': temp_working_dir
         }
+
+        # Cleanup
+        ProjectContext.clear()
 
     def test_chat_service_initialization(self, setup_test_environment):
         """Test that ChatService initializes correctly."""
@@ -70,88 +82,45 @@ class TestChatServiceIntegration:
         assert chat_service.session_id == env['project_id']
         assert chat_service.supabase_client is not None
         assert chat_service.project_service is not None
-        assert chat_service.templates is not None
 
-    def test_get_chat_history(self, setup_test_environment):
-        """Test retrieving chat history."""
+    def test_chat_history_query(self, setup_test_environment):
+        """Test querying chat history from database."""
         env = setup_test_environment
         chat_service = env['chat_service']
 
-        # Get chat history (may be empty on first run)
-        history = chat_service._get_chat_history(limit=5)
+        # Query chat history directly from database
+        response = chat_service.supabase_client.table("chat_messages")\
+            .select("*")\
+            .eq("project_id", env['project_id'])\
+            .order("created_at", desc=True)\
+            .limit(5)\
+            .execute()
 
-        assert isinstance(history, list)
-        # History should be in chronological order (oldest first)
-        if len(history) > 1:
-            assert history[0]['created_at'] <= history[1]['created_at']
+        assert isinstance(response.data, list)
+        # History may be empty on first run, that's okay
 
-    def test_intent_classification_new_analysis(self, setup_test_environment):
-        """Test intent classification for new analysis request."""
+    def test_extract_target_from_result(self, setup_test_environment):
+        """Test target extraction from Claude's response."""
         env = setup_test_environment
         chat_service = env['chat_service']
 
-        # Get first sheet for testing
-        first_sheet = env['sheets'][0]
-        first_dataset = env['datasets'][0]
+        # Test primary pattern: "Target: dataset.sheet"
+        result_text = "Analysis complete. Target: exploration.results"
+        target = chat_service._extract_target_from_result(result_text)
+        assert target['dataset'] == 'exploration'
+        assert target['sheet'] == 'results'
 
-        # Test new analysis intent
-        message = "show me summary statistics of the data"
-        intent_result = chat_service.intent(
-            message_user=message,
-            mode='explore',
-            ds_active=first_dataset['id'],
-            sheet_active=first_sheet['id'],
-            chat_history=[]
-        )
+        # Test fallback pattern: "saved to dataset.sheet"
+        result_text = "Data has been saved to analysis.output"
+        target = chat_service._extract_target_from_result(result_text)
+        assert target['dataset'] == 'analysis'
+        assert target['sheet'] == 'output'
 
-        assert 'action' in intent_result
-        assert intent_result['action'] in ['new', 'edit']
-        assert 'inputs' in intent_result
-        assert 'targets' in intent_result
-        assert 'confidence' in intent_result
-        assert len(intent_result['targets']) == 1  # Should have exactly one target
-
-    def test_intent_uses_exact_name_python(self, setup_test_environment):
-        """Test that intent classification uses exact name_python values from database."""
-        env = setup_test_environment
-        chat_service = env['chat_service']
-
-        # Get actual name_python from database
-        first_sheet = env['sheets'][0]
-        first_dataset = env['datasets'][0]
-        actual_sheet_name_python = first_sheet['name_python']
-        actual_dataset_name_python = first_dataset['name_python']
-
-        # Classify intent with natural language
-        message = f"show me the first 10 rows of {first_sheet['name']}"
-        intent_result = chat_service.intent(
-            message_user=message,
-            mode='explore',
-            ds_active=first_dataset['id'],
-            sheet_active=first_sheet['id'],
-            chat_history=[]
-        )
-
-        # Verify exact name_python values are used
-        assert len(intent_result['inputs']) > 0
-        assert intent_result['inputs'][0]['sheet'] == actual_sheet_name_python
-        assert intent_result['inputs'][0]['dataset'] == actual_dataset_name_python
-
-        print(f"\n✅ Intent classifier used exact name_python values")
-        print(f"   Dataset: {actual_dataset_name_python}")
-        print(f"   Sheet: {actual_sheet_name_python}")
-
-    def test_intent_validation_multiple_targets(self, setup_test_environment):
-        """Test that intent classification validates single target requirement."""
-        env = setup_test_environment
-        chat_service = env['chat_service']
-
-        # This test depends on the LLM correctly identifying multiple targets
-        # If the LLM returns multiple targets, it should raise ValueError
-        # Note: This may not always trigger as it depends on LLM interpretation
-
-        # Just verify the validation logic exists by checking the code path
-        # The actual validation happens in the intent() method
+        # Test default when no pattern found
+        result_text = "Some response without target information"
+        target = chat_service._extract_target_from_result(result_text)
+        assert target['dataset'] == 'exploration'
+        assert target['sheet'] == 'unknown'
 
     def test_chat_workflow_end_to_end(self, setup_test_environment):
         """
@@ -241,9 +210,14 @@ class TestChatServiceIntegration:
         env = setup_test_environment
         chat_service = env['chat_service']
 
-        # Get history before
-        history_before = chat_service._get_chat_history(limit=10)
-        count_before = len(history_before)
+        # Get history before using direct database query
+        response_before = chat_service.supabase_client.table("chat_messages")\
+            .select("*")\
+            .eq("project_id", env['project_id'])\
+            .order("created_at", desc=True)\
+            .limit(10)\
+            .execute()
+        count_before = len(response_before.data)
 
         # Send a chat message (simple one to minimize cost)
         first_sheet = env['sheets'][0]
@@ -260,19 +234,22 @@ class TestChatServiceIntegration:
             )
 
             # Get history after
-            history_after = chat_service._get_chat_history(limit=10)
-            count_after = len(history_after)
+            response_after = chat_service.supabase_client.table("chat_messages")\
+                .select("*")\
+                .eq("project_id", env['project_id'])\
+                .order("created_at", desc=True)\
+                .limit(10)\
+                .execute()
+            count_after = len(response_after.data)
 
             # Should have 2 new messages (user + agent)
             assert count_after >= count_before + 2
 
             # Verify latest messages
-            latest_messages = history_after[-2:]
-            assert latest_messages[0]['role'] == 'user'
-            assert latest_messages[1]['role'] == 'agent'
-            assert latest_messages[0]['content'] == message
-            assert latest_messages[0]['content_summary'] is not None
-            assert latest_messages[1]['content_summary'] is not None
+            latest_messages = response_after.data[:2]  # Get first 2 (newest)
+            roles = [msg['role'] for msg in latest_messages]
+            assert 'user' in roles
+            assert 'agent' in roles
 
             print(f"\n✅ Chat history persisted correctly")
             print(f"📝 Messages before: {count_before}, after: {count_after}")

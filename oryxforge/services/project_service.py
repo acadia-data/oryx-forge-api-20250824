@@ -25,7 +25,7 @@ class ProjectService:
     Service class for project-level operations including datasets, datasheets, and git operations.
     """
 
-    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None):
+    def __init__(self, project_id: Optional[str] = None, user_id: Optional[str] = None, working_dir: Optional[str] = None, mount_ensure: Optional[bool] = None):
         """
         Initialize project service.
 
@@ -35,6 +35,7 @@ class ProjectService:
             project_id: Project ID (if None, read from profile)
             user_id: User ID (if None, read from profile)
             working_dir: Working directory (if None, get from ProjectContext)
+            mount_ensure: Override mount_ensure setting (if None, read from config)
 
         Raises:
             ValueError: If project doesn't exist or profile is not configured
@@ -68,9 +69,14 @@ class ProjectService:
             self.mount_point = "./data"
             logger.debug("Using default mount point: ./data")
 
-        # Read mount_ensure from [mount] section
-        mount_ensure_str = config_service.get('mount', 'mount_ensure')
-        mount_ensure = (mount_ensure_str != 'false') if mount_ensure_str else True
+        # Determine mount_ensure setting
+        if mount_ensure is not None:
+            # Use provided parameter (override)
+            mount_ensure_final = mount_ensure
+        else:
+            # Read from [mount] section
+            mount_ensure_str = config_service.get('mount', 'mount_ensure')
+            mount_ensure_final = (mount_ensure_str != 'false') if mount_ensure_str else True
 
         # Initialize Supabase client
         self.supabase_client = init_supabase_client()
@@ -79,7 +85,7 @@ class ProjectService:
         self._validate_project()
 
         # Ensure data is mounted if configured
-        if mount_ensure:
+        if mount_ensure_final:
             self.ensure_mount()
 
     @property
@@ -189,7 +195,15 @@ class ProjectService:
 
         # Get project data to determine folder name if needed
         supabase_client = init_supabase_client()
-        project_data = get_project_data(supabase_client, project_id, user_id, fields="name,name_git")
+        project_data = get_project_data(supabase_client, project_id, user_id, fields="name,name_git,git_path")
+
+        # Check if GitLab repo exists, create if needed
+        if not project_data.get('git_path'):
+            logger.info("GitLab repository not found, creating...")
+            repo_service_temp = RepoService(project_id=project_id, user_id=user_id, working_dir=str(Path.cwd()))
+            repo_service_temp.create_repo()
+            # Refresh project_data to get updated git_path
+            project_data = get_project_data(supabase_client, project_id, user_id, fields="name,name_git,git_path")
 
         # Determine target directory
         if target_dir is None:
@@ -600,8 +614,8 @@ class ProjectService:
                 raise
             raise ValueError(f"Failed to get dataset-sheet combination: {str(e)}")
 
-    def project_init(self) -> None:
-        """Initialize project by ensuring git repository exists locally.
+    def ensure_repo(self) -> None:
+        """Ensure git repository exists locally.
 
         Clones the repository if not present, pulls latest changes if it exists.
 

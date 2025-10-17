@@ -64,12 +64,22 @@ class TestProjectService:
     @pytest.fixture
     def project_service(self, test_project_id, temp_working_dir):
         """Create ProjectService instance for integration testing."""
-        # Set up profile using CredentialsManager
-        creds_manager = CredentialsManager(working_dir=temp_working_dir)
-        creds_manager.set_profile(user_id=self.USER_ID, project_id=test_project_id)
+        from ..services.env_config import ProjectContext
 
-        # Create ProjectService - it will read from CredentialsManager
-        return ProjectService(working_dir=temp_working_dir)
+        # Set up project context (disables auto-mounting by setting mount_ensure=false)
+        ProjectContext.set(
+            user_id=self.USER_ID,
+            project_id=test_project_id,
+            working_dir=temp_working_dir
+        )
+
+        # Create ProjectService - will read config with mount_ensure=false
+        service = ProjectService(working_dir=temp_working_dir)
+
+        yield service
+
+        # Cleanup
+        ProjectContext.clear()
 
     @pytest.fixture
     def test_dataset_name(self):

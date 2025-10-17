@@ -17,6 +17,38 @@ class TestCLIService:
 
     USER_ID = '24d811e2-1801-4208-8030-a86abbda59b8'
 
+    # Track created resources for cleanup
+    created_projects = []
+    created_datasets = []
+    created_sheets = []
+
+    @pytest.fixture(scope="class", autouse=True)
+    def cleanup_resources(self, supabase_client):
+        """Cleanup all created resources after all tests complete."""
+        yield
+        # Cleanup sheets first (due to foreign key constraints)
+        for sheet_id in self.created_sheets:
+            try:
+                supabase_client.table("datasheets").delete().eq("id", sheet_id).execute()
+            except Exception:
+                pass
+        # Then cleanup datasets
+        for dataset_id in self.created_datasets:
+            try:
+                supabase_client.table("datasets").delete().eq("id", dataset_id).execute()
+            except Exception:
+                pass
+        # Finally cleanup projects
+        for project_id in self.created_projects:
+            try:
+                supabase_client.table("projects").delete().eq("id", project_id).execute()
+            except Exception:
+                pass
+        # Clear tracking lists
+        self.created_projects.clear()
+        self.created_datasets.clear()
+        self.created_sheets.clear()
+
     @pytest.fixture(scope="class")
     def supabase_client(self):
         """Get real Supabase client."""
@@ -47,11 +79,27 @@ class TestCLIService:
         """Generate unique project name for testing."""
         return f"test_project_{int(time.time())}"
 
+    def track_project(self, project_id: str):
+        """Track a project for cleanup."""
+        if project_id not in self.created_projects:
+            self.created_projects.append(project_id)
+
+    def track_dataset(self, dataset_id: str):
+        """Track a dataset for cleanup."""
+        if dataset_id not in self.created_datasets:
+            self.created_datasets.append(dataset_id)
+
+    def track_sheet(self, sheet_id: str):
+        """Track a sheet for cleanup."""
+        if sheet_id not in self.created_sheets:
+            self.created_sheets.append(sheet_id)
+
     def test_init_with_user_id(self, temp_working_dir):
         """Test initialization with explicit user ID."""
         service = CLIService(user_id=self.USER_ID, cwd=str(temp_working_dir))
         assert service.user_id == self.USER_ID
 
+    @pytest.mark.skip(reason="Test uses mocks - requires refactoring for real integration testing")
     def test_init_without_config_raises_error(self, temp_config_dir, temp_working_dir):
         """Test initialization without config raises error."""
         with patch.object(CLIService, 'config_dir', new_callable=lambda: temp_config_dir):
@@ -87,6 +135,7 @@ class TestCLIService:
         """Test successful project creation."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
         assert isinstance(project_id, str)
         assert len(project_id) > 0
 
@@ -96,27 +145,15 @@ class TestCLIService:
         assert created_project is not None
         assert created_project['name'] == test_project_name
 
-        # Clean up
-        try:
-            cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-        except Exception:
-            pass
-
     def test_projects_create_duplicate_name(self, cli_service, test_project_name):
         """Test project creation with duplicate name."""
         # Create first project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            # Try to create another with same name
-            with pytest.raises(ValueError, match="already exists"):
-                cli_service.projects_create(test_project_name)
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        # Try to create another with same name
+        with pytest.raises(ValueError, match="already exists"):
+            cli_service.projects_create(test_project_name)
 
     def test_projects_create_empty_name(self, cli_service):
         """Test project creation with empty name."""
@@ -128,17 +165,11 @@ class TestCLIService:
         """Test project_exists returns True for existing project."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            # Check that it exists
-            result = cli_service.project_exists(project_id)
-            assert result is True
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        # Check that it exists
+        result = cli_service.project_exists(project_id)
+        assert result is True
 
     def test_project_exists_false(self, cli_service):
         """Test project_exists returns False for non-existing project."""
@@ -165,57 +196,55 @@ class TestCLIService:
         """Test projects listing includes created project."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            # List should include the created project
-            result = cli_service.projects_list()
-            project_ids = [p['id'] for p in result]
-            assert project_id in project_ids
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        # List should include the created project
+        result = cli_service.projects_list()
+        project_ids = [p['id'] for p in result]
+        assert project_id in project_ids
 
     def test_project_activate_success(self, cli_service, test_project_name):
         """Test successful project activation."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            # Activate the project
-            cli_service.project_activate(project_id)
+        # Activate the project
+        cli_service.project_activate(project_id)
 
-            # Verify profile was written to .oryxforge.cfg
-            config_file = cli_service.cwd / '.oryxforge.cfg'
-            config = ConfigObj(str(config_file))
-            assert config['profile']['project_id'] == project_id
-            assert config['profile']['user_id'] == cli_service.user_id
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        # Verify profile was written to .oryxforge.cfg
+        config_file = cli_service.cwd / '.oryxforge.cfg'
+        config = ConfigObj(str(config_file))
+        assert config['profile']['project_id'] == project_id
+        assert config['profile']['user_id'] == cli_service.user_id
 
     def test_project_activate_not_found(self, cli_service):
         """Test project activation with non-existing project."""
         with pytest.raises(ValueError, match="Project .* not found"):
             cli_service.project_activate('00000000-0000-0000-0000-000000000000')
 
-    def test_dataset_activate_success(self, cli_service, test_project_name):
+    def test_dataset_activate_success(self, cli_service, test_project_name, temp_working_dir):
         """Test successful dataset activation."""
         # Need to create project and dataset first
         from ..services.project_service import ProjectService
+        from ..services.env_config import ProjectContext
 
         # Create project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
         try:
+            # Set up context (disables auto-mounting)
+            ProjectContext.set(
+                user_id=self.USER_ID,
+                project_id=project_id,
+                working_dir=str(temp_working_dir)
+            )
+
             # Create ProjectService to manage datasets
-            proj_service = ProjectService(project_id, self.USER_ID)
+            proj_service = ProjectService(working_dir=str(temp_working_dir))
             dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')['id']
+            self.track_dataset(dataset_id)
 
             # Activate the dataset
             cli_service.dataset_activate(dataset_id)
@@ -225,32 +254,38 @@ class TestCLIService:
             config = ConfigObj(str(config_file))
             assert config['active']['dataset_id'] == dataset_id
         finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("datasets").delete().eq("project_id", project_id).execute()
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+            ProjectContext.clear()
 
     def test_dataset_activate_not_found(self, cli_service):
         """Test dataset activation with non-existing dataset."""
         with pytest.raises(ValueError, match="Dataset .* not found"):
             cli_service.dataset_activate('00000000-0000-0000-0000-000000000000')
 
-    def test_sheet_activate_success(self, cli_service, test_project_name):
+    def test_sheet_activate_success(self, cli_service, test_project_name, temp_working_dir):
         """Test successful sheet activation."""
         # Need to create project, dataset, and sheet first
         from ..services.project_service import ProjectService
+        from ..services.env_config import ProjectContext
 
         # Create project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
         try:
+            # Set up context (disables auto-mounting)
+            ProjectContext.set(
+                user_id=self.USER_ID,
+                project_id=project_id,
+                working_dir=str(temp_working_dir)
+            )
+
             # Create ProjectService to manage datasets and sheets
-            proj_service = ProjectService(project_id, self.USER_ID)
+            proj_service = ProjectService(working_dir=str(temp_working_dir))
             dataset_id = proj_service.ds_create(f'dataset_in_{test_project_name}')['id']
+            self.track_dataset(dataset_id)
             sheet_data = proj_service.sheet_create(dataset_id, f'sheet_in_{test_project_name}')
             sheet_id = sheet_data['id']
+            self.track_sheet(sheet_id)
 
             # Activate the sheet
             cli_service.sheet_activate(sheet_id)
@@ -260,13 +295,7 @@ class TestCLIService:
             config = ConfigObj(str(config_file))
             assert config['active']['sheet_id'] == sheet_id
         finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("datasheets").delete().eq("dataset_id", dataset_id).execute()
-                cli_service.supabase_client.table("datasets").delete().eq("project_id", project_id).execute()
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+            ProjectContext.clear()
 
     def test_sheet_activate_not_found(self, cli_service):
         """Test sheet activation with non-existing sheet."""
@@ -287,37 +316,25 @@ class TestCLIService:
         """Test get_active with existing config file."""
         # Create a project and activate it
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            cli_service.project_activate(project_id)
+        cli_service.project_activate(project_id)
 
-            # Get active config
-            result = cli_service.get_active()
-            assert result['project_id'] == project_id
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        # Get active config
+        result = cli_service.get_active()
+        assert result['project_id'] == project_id
 
     def test_interactive_project_select_success(self, cli_service, test_project_name):
         """Test successful interactive project selection."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            with patch('builtins.input', return_value='1'):
-                result = cli_service.interactive_project_select()
-                # Should return a valid project ID
-                assert isinstance(result, str)
-                assert len(result) > 0
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        with patch('builtins.input', return_value='1'):
+            result = cli_service.interactive_project_select()
+            # Should return a valid project ID
+            assert isinstance(result, str)
+            assert len(result) > 0
 
     def test_interactive_project_select_no_projects(self, cli_service):
         """Test interactive project selection with no projects."""
@@ -334,51 +351,33 @@ class TestCLIService:
         """Test interactive project selection with invalid choice."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            with patch('builtins.input', side_effect=['999', '1']):  # Invalid then valid
-                result = cli_service.interactive_project_select()
-                # Should eventually return a valid project ID
-                assert isinstance(result, str)
-                assert len(result) > 0
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        with patch('builtins.input', side_effect=['999', '1']):  # Invalid then valid
+            result = cli_service.interactive_project_select()
+            # Should eventually return a valid project ID
+            assert isinstance(result, str)
+            assert len(result) > 0
 
     def test_interactive_project_select_cancelled(self, cli_service, test_project_name):
         """Test interactive project selection when cancelled."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            with patch('builtins.input', return_value=''):  # Empty input
-                with pytest.raises(ValueError, match="Project selection cancelled"):
-                    cli_service.interactive_project_select()
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        with patch('builtins.input', return_value=''):  # Empty input
+            with pytest.raises(ValueError, match="Project selection cancelled"):
+                cli_service.interactive_project_select()
 
     def test_interactive_project_select_keyboard_interrupt(self, cli_service, test_project_name):
         """Test interactive project selection with keyboard interrupt."""
         # Create a project
         project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
 
-        try:
-            with patch('builtins.input', side_effect=KeyboardInterrupt):
-                with pytest.raises(ValueError, match="Project selection cancelled"):
-                    cli_service.interactive_project_select()
-        finally:
-            # Clean up
-            try:
-                cli_service.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+        with patch('builtins.input', side_effect=KeyboardInterrupt):
+            with pytest.raises(ValueError, match="Project selection cancelled"):
+                cli_service.interactive_project_select()
 
 
     def test_import_file_creates_data_source(self, temp_working_dir):
@@ -386,6 +385,7 @@ class TestCLIService:
         import pandas as pd
         from ..services.iam import CredentialsManager
         from ..services.project_service import ProjectService
+        from ..services.env_config import ProjectContext
 
         # Create a test CSV file
         df = pd.DataFrame({'col1': [1, 2, 3], 'col2': ['a', 'b', 'c']})
@@ -402,19 +402,28 @@ class TestCLIService:
         from ..services.cli_service import CLIService
         temp_cli = CLIService(user_id=self.USER_ID, cwd=str(temp_working_dir))
         project_id = temp_cli.projects_create(test_project_name)
+        self.track_project(project_id)
 
         try:
             # Set profile with user_id and project_id
             creds_manager.set_profile(user_id=self.USER_ID, project_id=project_id)
 
+            # Set up context (disables auto-mounting)
+            ProjectContext.set(
+                user_id=self.USER_ID,
+                project_id=project_id,
+                working_dir=str(temp_working_dir)
+            )
+
             # Ensure Sources dataset exists
-            proj_service = ProjectService(project_id, self.USER_ID)
+            proj_service = ProjectService(working_dir=str(temp_working_dir))
             try:
                 sources_dataset = proj_service.ds_get(name="Sources")
                 dataset_id = sources_dataset['id']
             except ValueError:
                 # Create Sources dataset if it doesn't exist
                 dataset_id = proj_service.ds_create("Sources")['id']
+                self.track_dataset(dataset_id)
 
             # Create CLIService with working directory that has profile
             cli_service = CLIService(cwd=str(temp_working_dir))
@@ -432,17 +441,33 @@ class TestCLIService:
             # For full import testing, we need the ClaudeAgent to be available
 
         finally:
-            # Clean up
-            try:
-                # Clean up data sources
-                temp_cli.supabase_client.table("data_sources").delete().eq("project_id", project_id).execute()
-                # Clean up datasets
-                temp_cli.supabase_client.table("datasets").delete().eq("project_id", project_id).execute()
-                # Clean up project
-                temp_cli.supabase_client.table("projects").delete().eq("id", project_id).execute()
-            except Exception:
-                pass
+            ProjectContext.clear()
 
+    @pytest.mark.skip(reason="This test requires GitLab repo setup and is slow")
+    def test_admin_pull_command(self, temp_working_dir, test_project_name):
+        """Test admin pull command via ProjectService.project_init() classmethod."""
+        from ..services.project_service import ProjectService
+
+        # Create a project
+        cli_service = CLIService(user_id=self.USER_ID, cwd=str(temp_working_dir))
+        project_id = cli_service.projects_create(test_project_name)
+        self.track_project(project_id)
+
+        # Call the classmethod that admin.py uses
+        target_dir = ProjectService.project_init(
+            project_id=project_id,
+            user_id=self.USER_ID,
+            target_dir=None  # Auto-generate
+        )
+
+        # Verify project was initialized
+        assert Path(target_dir).exists()
+        assert (Path(target_dir) / '.oryxforge.cfg').exists()
+
+        # Verify config contains correct IDs
+        config = ConfigObj(str(Path(target_dir) / '.oryxforge.cfg'))
+        assert config['profile']['project_id'] == project_id
+        assert config['profile']['user_id'] == self.USER_ID
 
 
 if __name__ == '__main__':

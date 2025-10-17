@@ -58,6 +58,10 @@ def set_profile(userid: str, projectid: str):
     from ..services.iam import CredentialsManager
     from pathlib import Path
 
+    # Strip whitespace from UUID parameters
+    userid = userid.strip()
+    projectid = projectid.strip()
+
     creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
     creds_manager.set_profile(user_id=userid, project_id=projectid)
     click.echo(f"✅ Profile set successfully")
@@ -133,6 +137,9 @@ def create_project(name: str, userid: str):
         name: Project name (must be unique for user)
         userid: User ID from Supabase auth.users table
     """
+    # Strip whitespace from UUID parameter
+    userid = userid.strip()
+
     # Call ProjectService.create_project directly (classmethod, no profile needed)
     project_id = ProjectService.create_project(name, userid, setup_repo=True)
     click.echo(f"✅ Created project '{name}' with ID: {project_id}")
@@ -164,6 +171,9 @@ def init_project(name: str, userid: str, target: Optional[str]):
         oryxforge admin projects init "My Project" --userid <user-id>
         oryxforge admin projects init "My Project" --userid <user-id> --target ./my-folder
     """
+    # Strip whitespace from UUID parameter
+    userid = userid.strip()
+
     # Step 1: Create project in DB + GitLab
     click.echo(f"Creating project '{name}'...")
     project_id = ProjectService.create_project(name, userid, setup_repo=True)
@@ -205,6 +215,10 @@ def pull_project(projectid: str, userid: str, target: Optional[str]):
         oryxforge admin pull --projectid <project-id> --userid <user-id>
         oryxforge admin pull --projectid <project-id> --userid <user-id> --target ./my-folder
     """
+    # Strip whitespace from UUID parameters
+    projectid = projectid.strip()
+    userid = userid.strip()
+
     # Use project_init workflow
     target_dir = ProjectService.project_init(
         project_id=projectid,

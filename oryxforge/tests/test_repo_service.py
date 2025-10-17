@@ -30,10 +30,10 @@ class TestRepoService:
         return self.PROJECT_ID
 
     @pytest.fixture
-    def temp_working_dir(self):
-        """Create temporary working directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            yield Path(temp_dir)
+    def temp_working_dir(self, temp_working_dir_repo):
+        """Create temporary working directory with Windows cleanup support."""
+        # Use the temp_working_dir_repo fixture which handles Windows file locking
+        yield temp_working_dir_repo
 
     @pytest.fixture
     def repo_service(self, test_project_id, temp_working_dir):
@@ -195,13 +195,13 @@ class TestRepoService:
         assert test_file.exists()
 
     def test_project_service_integration(self, test_project_id, temp_working_dir):
-        """Test ProjectService using RepoService for project_init."""
+        """Test ProjectService using RepoService for ensure_repo."""
         # Create ProjectService with temp directory
         with patch('pathlib.Path.cwd', return_value=temp_working_dir):
             project_service = ProjectService(test_project_id, self.USER_ID)
 
-            # Call project_init (should use RepoService internally)
-            project_service.project_init()
+            # Call ensure_repo (should use RepoService internally)
+            project_service.ensure_repo()
 
             # Verify repository was set up
             assert (temp_working_dir / '.git').exists()

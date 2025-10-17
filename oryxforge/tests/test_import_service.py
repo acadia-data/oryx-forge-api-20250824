@@ -28,6 +28,21 @@ class TestImportService:
             yield temp_dir
 
     @pytest.fixture
+    def project_context_setup(self, temp_working_dir):
+        """Set up ProjectContext for tests that create ImportService."""
+        from ..services.env_config import ProjectContext
+
+        ProjectContext.set(
+            user_id=self.USER_ID,
+            project_id=self.PROJECT_ID,
+            working_dir=temp_working_dir
+        )
+
+        yield temp_working_dir
+
+        ProjectContext.clear()
+
+    @pytest.fixture
     def sample_csv_file(self, temp_working_dir):
         """Create a sample CSV file for testing."""
         df = pd.DataFrame({
@@ -82,7 +97,7 @@ class TestImportService:
         # Cleanup
         supabase_client.table("data_sources").delete().eq("id", file_id).execute()
 
-    def test_init_success(self, data_source_local, supabase_client):
+    def test_init_success(self, data_source_local, supabase_client, project_context_setup):
         """Test successful initialization with local file."""
         service = ImportService(file_id=data_source_local)
 
@@ -91,13 +106,13 @@ class TestImportService:
         assert service.file['name'] == 'test.csv'
         assert service.project_service is not None
 
-    def test_init_invalid_file_id(self):
+    def test_init_invalid_file_id(self, project_context_setup):
         """Test initialization with invalid file_id raises error."""
         # Use a valid UUID format that doesn't exist
         with pytest.raises(ValueError, match="No file found with file_id"):
             ImportService(file_id="00000000-0000-0000-0000-000000000000")
 
-    def test_filepath_local(self, data_source_local):
+    def test_filepath_local(self, data_source_local, project_context_setup):
         """Test filepath() method with local:// URI."""
         service = ImportService(file_id=data_source_local)
         file_path = service.filepath()
@@ -105,7 +120,7 @@ class TestImportService:
         assert isinstance(file_path, Path)
         assert file_path.exists()
 
-    def test_filepath_supabase(self, data_source_supabase):
+    def test_filepath_supabase(self, data_source_supabase, project_context_setup):
         """Test filepath() method with supabase:// URI."""
         service = ImportService(file_id=data_source_supabase)
         file_path = service.filepath()
@@ -114,7 +129,7 @@ class TestImportService:
         # Compare parts to avoid path separator issues on Windows
         assert file_path.parts == ("data", ".import", "test-file.csv")
 
-    def test_filepath_unsupported_uri(self, supabase_client):
+    def test_filepath_unsupported_uri(self, supabase_client, project_context_setup):
         """Test filepath() with unsupported URI format."""
         response = supabase_client.table("data_sources").insert({
             "uri": "http://example.com/file.csv",
@@ -135,12 +150,12 @@ class TestImportService:
             # Cleanup
             supabase_client.table("data_sources").delete().eq("id", file_id).execute()
 
-    def test_exists_local_true(self, data_source_local):
+    def test_exists_local_true(self, data_source_local, project_context_setup):
         """Test exists_local() returns True for existing local file."""
         service = ImportService(file_id=data_source_local)
         assert service.exists_local() is True
 
-    def test_exists_local_false(self, supabase_client):
+    def test_exists_local_false(self, supabase_client, project_context_setup):
         """Test exists_local() returns False for non-existent file."""
         response = supabase_client.table("data_sources").insert({
             "uri": "local:///nonexistent/file.csv",
@@ -160,13 +175,13 @@ class TestImportService:
             # Cleanup
             supabase_client.table("data_sources").delete().eq("id", file_id).execute()
 
-    def test_download_skips_local(self, data_source_local):
+    def test_download_skips_local(self, data_source_local, project_context_setup):
         """Test download() skips files with local:// URI."""
         service = ImportService(file_id=data_source_local)
         # Should not raise any error
         service.download()
 
-    def test_render_prompt(self, data_source_local):
+    def test_render_prompt(self, data_source_local, project_context_setup):
         """Test _render_prompt() method uses Jinja2."""
         service = ImportService(file_id=data_source_local)
 
@@ -223,37 +238,47 @@ class TestImportService:
             # Cleanup
             supabase_client.table("data_sources").delete().eq("id", file_id_1).execute()
 
-    def test_idempotent_sheet_creation(self, supabase_client):
+    def test_idempotent_sheet_creation(self, supabase_client, temp_working_dir):
         """Test that creating the same sheet twice with upsert returns same ID."""
-        # Get Sources dataset
-        project_service = ProjectService(
+        from ..services.env_config import ProjectContext
+
+        # Set up project context (disables auto-mounting)
+        ProjectContext.set(
+            user_id=self.USER_ID,
             project_id=self.PROJECT_ID,
-            user_id=self.USER_ID
-        )
-
-        sources_dataset = project_service.ds_get(name="Sources")
-        dataset_id = sources_dataset['id']
-
-        # First create
-        sheet_data_1 = project_service.sheet_create(
-            dataset_id=dataset_id,
-            name="test_idempotent_sheet"
-        )
-
-        # Second create with same name - should return same ID
-        sheet_data_2 = project_service.sheet_create(
-            dataset_id=dataset_id,
-            name="test_idempotent_sheet"
+            working_dir=temp_working_dir
         )
 
         try:
-            # Should return same ID and data
-            assert sheet_data_1['id'] == sheet_data_2['id'], "sheet_create should return same ID on retry"
-            assert sheet_data_1['name'] == sheet_data_2['name'], "sheet_create should return same name on retry"
-            assert sheet_data_1['name_python'] == sheet_data_2['name_python'], "sheet_create should return same name_python on retry"
+            # Get Sources dataset
+            project_service = ProjectService(working_dir=temp_working_dir)
+
+            sources_dataset = project_service.ds_get(name="Sources")
+            dataset_id = sources_dataset['id']
+
+            # First create
+            sheet_data_1 = project_service.sheet_create(
+                dataset_id=dataset_id,
+                name="test_idempotent_sheet"
+            )
+
+            # Second create with same name - should return same ID
+            sheet_data_2 = project_service.sheet_create(
+                dataset_id=dataset_id,
+                name="test_idempotent_sheet"
+            )
+
+            try:
+                # Should return same ID and data
+                assert sheet_data_1['id'] == sheet_data_2['id'], "sheet_create should return same ID on retry"
+                assert sheet_data_1['name'] == sheet_data_2['name'], "sheet_create should return same name on retry"
+                assert sheet_data_1['name_python'] == sheet_data_2['name_python'], "sheet_create should return same name_python on retry"
+            finally:
+                # Cleanup
+                supabase_client.table("datasheets").delete().eq("id", sheet_data_1['id']).execute()
         finally:
-            # Cleanup
-            supabase_client.table("datasheets").delete().eq("id", sheet_data_1['id']).execute()
+            # Cleanup context
+            ProjectContext.clear()
 
 
 if __name__ == '__main__':

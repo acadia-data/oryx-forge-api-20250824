@@ -64,19 +64,31 @@ oryxforge admin projects init "My Project" --userid "your-user-id"
 # You'll get a new folder: ./my-project/
 
 cd my-project
+oryxforge admin data list
+oryxforge admin config mode set explore
 oryxforge admin sources import data.csv
 oryxforge agent chat "show me summary statistics"
 ```
 
 ### Option 2: Pull Existing Project
 
+
+
 ```bash
+# create a top level folder and initialize credentials there
+mkdir oryx-forge-projects
+cd oryx-forge-projects
+oryxforge admin config profile set --userid "your-user-id" --projectid "ignore"
+
+# list projects
+oryxforge admin projects list
+
 # Pull an existing project by ID
 oryxforge admin pull --projectid "project-id" --userid "your-user-id"
 
 cd project-folder
-oryxforge admin sources import data.csv
-oryxforge agent chat "show me summary statistics"
+oryxforge admin sources import data/data.csv
+oryxforge agent chat "show me summary statistics for data.csv"
 ```
 
 ## Configuration Management
@@ -90,10 +102,10 @@ Profile settings store your user ID and project ID for CLI operations.
 #### Set Profile
 
 ```bash
-oryxforge admin config profile set --userid "550e8400-e29b-41d4-a716-446655440000" --projectid "abc123-project-id"
+oryxforge admin config profile set --userid "your-user-id" --projectid "your-project-id"
 ```
 
-Both the user ID and project ID must exist in your Supabase database. You can get these from the OryxForge web UI.
+Both the user ID and project ID must exist in your Supabase database. You can get these from the OryxForge web UI, userid is in the user profile and project id is in the project settings.
 
 #### Get Profile
 
@@ -106,8 +118,8 @@ oryxforge admin config profile get
 Output example:
 ```
 Current profile:
-  User ID: 550e8400-e29b-41d4-a716-446655440000
-  Project ID: abc123-project-id
+  User ID: your-user-id
+  Project ID: your-project-id
 ```
 
 #### Clear Profile
@@ -309,7 +321,7 @@ This creates:
 **Next steps after `create`:**
 ```bash
 # Pull the project to set it up locally
-oryxforge admin pull --projectid <project-id> --userid "your-user-id"
+oryxforge admin pull --projectid "your-project-id" --userid "your-user-id"
 ```
 
 ### Initialize New Project (Create + Pull in One Step)
@@ -364,7 +376,7 @@ The `pull` command:
 **Example:**
 ```bash
 # Pull project
-oryxforge admin pull --projectid abc-123 --userid xyz-789
+oryxforge admin pull --projectid "your-project-id" --userid "your-user-id"
 
 # Output: ✅ Project pulled to: ./project-name
 cd ./project-name
@@ -642,8 +654,8 @@ oryxforge admin status
 
 Output example:
 ```
-User ID: 550e8400-e29b-41d4-a716-446655440000
-Project ID: abc123...
+User ID: your-user-id
+Project ID: your-project-id
 Active Dataset: def456...
 Active Datasheet: ghi789...
 Project Mode: explore

@@ -161,12 +161,16 @@ module = [
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["oryxforge/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
-    "asyncio: mark test as async"
+    "asyncio: mark test as async",
+    "integration: mark test as an integration test",
+    "unit: mark test as a unit test",
+    "slow: mark test as slow running",
+    "requires_data: mark test as requiring test data in database"
 ]
 addopts = [
     "--cov=oryxforge",
@@ -174,6 +178,7 @@ addopts = [
     "--cov-report=html",
     "--strict-markers",
     "--strict-config",
+    "-v"
 ]
 
 [tool.coverage.run]

@@ -1,7 +1,10 @@
+# Set environment flag to indicate FastAPI mode
+import os
+os.environ['FASTAPI_ENV'] = 'true'
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-import os
 import pandas as pd
 from supabase import create_client, Client
 

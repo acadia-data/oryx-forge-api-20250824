@@ -29,7 +29,6 @@ class ProjectContext:
             True if running in GCP or local API mode
         """
         return os.environ.get('GOOGLE_CLOUD_PROJECT') is not None or \
-               'uvicorn' in sys.modules or \
                os.environ.get('FASTAPI_ENV') is not None
 
     @staticmethod
@@ -181,4 +180,7 @@ class ProjectContext:
             # CLI mode - enable auto-mounting, let user configure mount point
             config_service.set('mount', 'mount_ensure', 'true')
 
-            logger.debug("CLI mode: mount_ensure=true")
+            # Set default mode to 'explore' for new projects
+            config_service.set('active', 'mode', 'explore')
+
+            logger.debug("CLI mode: mount_ensure=true, mode=explore")

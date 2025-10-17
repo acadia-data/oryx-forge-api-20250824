@@ -64,7 +64,7 @@ class TestMCPProjectFunctions:
         result = project_create_sheet(dataset_id="dataset-123", name="Test Sheet")
 
         assert result == "sheet-id-789"
-        mock_instance.sheet_create.assert_called_once_with("dataset-123", "Test Sheet")
+        mock_instance.sheet_create.assert_called_once_with("dataset-123", "Test Sheet", source_id=None)
 
     def test_project_list_datasets(self, setup_profile, mock_project_service, monkeypatch):
         """Test listing datasets via MCP."""

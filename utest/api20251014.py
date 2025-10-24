@@ -6,7 +6,7 @@ PROJECT_ID = '5f4c4e33-4e4e-4a3b-94cd-046be895ccb9'
 
 base_url = "http://localhost:8000"
 base_url = "http://127.0.0.1:8000"
-# base_url = "https://oryx-forge-dev-20250823-846392806260.us-central1.run.app"
+base_url = "https://oryx-forge-dev-20250823-846392806260.us-central1.run.app"
 
 # Test Preview
 print("Testing Preview...")

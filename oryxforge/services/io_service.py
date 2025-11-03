@@ -728,10 +728,10 @@ class IOService:
             try:
                 flow = d6tflow.Workflow(task=task_class)
                 if not flow.complete(cascade=False):
-                    logger.info(f"d6tflow Running task: {sheet}")
+                    logger.info(f"d6tflow Running task: {sheet} | dir: {self.ps.working_dir} | d6tflow dir {d6tflow.settings.dir}")
                     flow.run()
                 else:
-                    logger.debug(f"d6tflow already completed: {sheet}")
+                    logger.debug(f"d6tflow already completed: {sheet} | dir: {self.ps.working_dir} | d6tflow dir {d6tflow.settings.dir}")
                 output = flow.outputLoad(task_class)
                 logger.success(f"d6tflow successfully loaded task output for {name_python}")
                 return output

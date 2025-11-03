@@ -141,10 +141,9 @@ def set_profile(request: ProfileRequest):
     The profile is written to the .oryxforge.cfg file in the working directory.
     """
     from oryxforge.services.iam import CredentialsManager
-    from pathlib import Path
 
-    # Use current working directory for profile config
-    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    # Use ProjectContext for working directory (falls back to cwd if not set)
+    creds_manager = CredentialsManager()
     creds_manager.set_profile(user_id=request.user_id, project_id=request.project_id)
 
     return {
@@ -163,10 +162,9 @@ def get_data_context(request: DataContextRequest):
     This demonstrates how profile can be set per request and used with additional context.
     """
     from oryxforge.services.iam import CredentialsManager
-    from pathlib import Path
 
     # Set profile from request
-    creds_manager = CredentialsManager(working_dir=str(Path.cwd()))
+    creds_manager = CredentialsManager()
     creds_manager.set_profile(user_id=request.user_id, project_id=request.project_id)
 
     # For now, just return the context

@@ -76,6 +76,7 @@ oryxforge agent chat "show me summary statistics"
 
 ```bash
 # create a top level folder and initialize credentials there
+# !!! don't do it in synced onedrive folders because the mount/symlink will get copied to real files on other machines
 mkdir oryx-forge-projects
 cd oryx-forge-projects
 oryxforge admin config profile set --userid "your-user-id" --projectid "ignore"
@@ -84,9 +85,15 @@ oryxforge admin config profile set --userid "your-user-id" --projectid "ignore"
 oryxforge admin projects list
 
 # Pull an existing project by ID
-oryxforge admin pull --projectid "project-id" --userid "your-user-id"
+oryxforge admin pull --projectid "project-id" --userid "your-user-id" --target-create
 
-cd project-folder
+# Configure and mount data directory (suggest sets the path and optionally mounts)
+oryxforge admin config mount suggest "D:\\data\\oryx-forge-projects"
+oryxforge admin config mount set "D:\\data\\{userid}\\{projectid}" # set to a project folder
+
+# mount if already configured
+oryxforge admin mount
+
 oryxforge admin sources import data/data.csv
 oryxforge agent chat "show me summary statistics for data.csv"
 ```
@@ -208,9 +215,9 @@ Current project mode: explore
 
 ### Mount Point Configuration
 
-Configure where project data is mounted locally.
+Configure where project data is mounted.
 
-#### Set Mount Point
+#### Set Mount Point to a specific folder
 
 ```bash
 # Windows
@@ -243,7 +250,7 @@ Automatically generate a mount point path with organized user/project hierarchy:
 
 ```bash
 # Windows
-oryxforge admin config mount suggest "D:\\data\\oryx-forge"
+oryxforge admin config mount suggest "D:\\data\\oryx-forge-projects"
 
 # Linux/macOS
 oryxforge admin config mount suggest "/mnt/oryx-forge"
@@ -252,10 +259,13 @@ oryxforge admin config mount suggest "/mnt/oryx-forge"
 **What it does:**
 - Takes your base path (e.g., `D:\\data\\oryx-forge`)
 - Automatically appends `/{user_id}/{project_id}/data`
-- Creates parent directories automatically when setting the mount point
+- Sets the mount point in your project configuration
+- Creates parent directories automatically
 - Creates an organized hierarchy for multiple projects
 - Outputs in cross-platform POSIX format
-- Optionally mounts the data directory immediately
+- Optionally mounts the data directory immediately using rclone
+
+**This is the recommended way to configure mounting** - it handles everything in one command.
 
 **Example workflow:**
 ```bash
@@ -269,6 +279,8 @@ Created directory: D:\\data\\oryx-forge\\{user-id}\\{project-id}
 Do you want to mount the data directory now? [Y/n]: y
 ✅ Successfully mounted data directory at D:/data/oryx-forge/{user-id}/{project-id}/data
 ```
+
+**Note:** You don't need to run `oryxforge admin config mount set` separately - the `suggest` command handles configuration automatically.
 
 **Directory structure created:**
 ```
@@ -361,26 +373,39 @@ Next steps:
 Clone an existing project repository and set it up locally:
 
 ```bash
-# Pull by project ID
+# Pull into current directory (default)
 oryxforge admin pull --projectid "project-id" --userid "your-user-id"
+
+# Auto-create new subfolder from project name
+oryxforge admin pull --projectid "project-id" --userid "your-user-id" --target-create
 
 # Specify custom target directory
 oryxforge admin pull --projectid "project-id" --userid "your-user-id" --target ./my-folder
 ```
 
 The `pull` command:
-- Clones the GitLab repository to a new folder (default: auto-generated from project name)
+- **Default behavior**: Clones the GitLab repository into the current directory
+- **With `--target-create`**: Creates a new subfolder named after the project (uses `name_git` slug)
+- **With `--target <path>`**: Clones into the specified directory
 - Sets up `.oryxforge.cfg` configuration file inside the project directory
 - Makes the project ready for local development
 
-**Example:**
-```bash
-# Pull project
-oryxforge admin pull --projectid "your-project-id" --userid "your-user-id"
+**Examples:**
 
-# Output: ✅ Project pulled to: ./project-name
-cd ./project-name
+```bash
+# Pull into current directory (you control location by cd'ing first)
+mkdir my-project && cd my-project
+oryxforge admin pull --projectid "your-project-id" --userid "your-user-id"
+# Clones directly into ./my-project/
+
+# Auto-create subfolder from project name
+oryxforge admin pull --projectid "your-project-id" --userid "your-user-id" --target-create
+# Creates ./project-name-slug/ folder
+cd project-name-slug
 # Start working!
+
+# Custom target directory
+oryxforge admin pull --projectid "your-project-id" --userid "your-user-id" --target ./custom-folder
 ```
 
 ## Data Source Management
@@ -843,7 +868,7 @@ oryxforge agent chat --help
 - `oryxforge admin projects list` - List all projects
 - `oryxforge admin projects create <name> --userid <id>` - Create new project (DB + GitLab only)
 - `oryxforge admin projects init <name> --userid <id> [--target <path>]` - Create and initialize project locally (recommended)
-- `oryxforge admin pull --projectid <id> --userid <id> [--target <path>]` - Clone existing project repository
+- `oryxforge admin pull --projectid <id> --userid <id> [--target <path>] [--target-create]` - Clone existing project repository
 
 ### Source Commands
 - `oryxforge admin sources import <filepath>` - Import data file

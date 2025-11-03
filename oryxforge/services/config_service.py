@@ -20,9 +20,14 @@ class ConfigService:
         Initialize configuration service.
 
         Args:
-            working_dir: Working directory where config file is located (if None, use current directory)
+            working_dir: Working directory where config file is located
+                        (if None, uses ProjectContext.get() which falls back to current directory)
         """
-        self.working_dir = Path(working_dir) if working_dir else Path.cwd()
+        if working_dir is None:
+            from .env_config import ProjectContext
+            self.working_dir = Path(ProjectContext.get())
+        else:
+            self.working_dir = Path(working_dir)
         self.config_file = self.working_dir / '.oryxforge.cfg'
 
     def _load_config(self) -> ConfigObj:

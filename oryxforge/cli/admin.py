@@ -197,27 +197,55 @@ def init_project(name: str, userid: str, target: Optional[str]):
 @admin.command('pull')
 @click.option('--projectid', required=True, help='Project ID to pull')
 @click.option('--userid', required=True, help='User ID')
-@click.option('--target', help='Target directory (default: auto-generate from project name)')
+@click.option('--target', help='Target directory (default: current directory)')
+@click.option('--target-create', is_flag=True, help='Create new subfolder from project name')
 @handle_errors
-def pull_project(projectid: str, userid: str, target: Optional[str]):
+def pull_project(projectid: str, userid: str, target: Optional[str], target_create: bool):
     """
     Pull/clone a project repository and set up local config.
 
-    Creates a new directory for the project, clones the repository, and sets up
-    the .oryxforge.cfg file inside the project directory.
+    By default, clones into the current directory. Use --target-create to
+    automatically create a new subfolder named after the project.
 
     Args:
         projectid: Project UUID to pull
         userid: User UUID (from Supabase auth.users table)
-        target: Optional target directory (default: auto-generate from project name)
+        target: Optional target directory (default: current directory)
+        target_create: Create new subfolder from project name (mutually exclusive with --target)
 
     Examples:
+        # Pull into current directory
         oryxforge admin pull --projectid <project-id> --userid <user-id>
+
+        # Auto-create ./project-name/ subfolder
+        oryxforge admin pull --projectid <project-id> --userid <user-id> --target-create
+
+        # Pull into specific directory
         oryxforge admin pull --projectid <project-id> --userid <user-id> --target ./my-folder
     """
+    from ..services.utils import get_project_data, init_supabase_client
+
     # Strip whitespace from UUID parameters
     projectid = projectid.strip()
     userid = userid.strip()
+
+    # Validate mutually exclusive options
+    if target_create and target:
+        raise click.UsageError("Cannot use both --target and --target-create. Choose one.")
+
+    # Determine target directory
+    if target_create:
+        # Fetch project data to get name_git slug
+        supabase_client = init_supabase_client()
+        project_data = get_project_data(supabase_client, projectid, userid, fields="name_git")
+        target = str(Path.cwd() / project_data['name_git'])
+
+        # Check if directory already exists
+        if Path(target).exists():
+            raise ValueError(f"Directory '{target}' already exists. Please remove it or use --target to specify a different location.")
+    elif not target:
+        # Default: current directory
+        target = str(Path.cwd())
 
     # Use project_init workflow
     target_dir = ProjectService.project_init(
@@ -227,9 +255,12 @@ def pull_project(projectid: str, userid: str, target: Optional[str]):
     )
 
     click.echo(f"✅ Project pulled to: {target_dir}")
-    click.echo(f"\nNext steps:")
-    click.echo(f"  cd {target_dir}")
-    click.echo(f"  # Start working on your project!")
+
+    # Only suggest cd if target_create was used (created new subfolder)
+    if target_create:
+        click.echo(f"\nNext steps:")
+        click.echo(f"  cd {Path(target_dir).name}")
+        click.echo(f"  # Start working on your project!")
 
 
 @admin.group()
@@ -465,8 +496,8 @@ def suggest_mount_point(base_path: str):
 
             # Ask if user wants to mount it now
             if click.confirm(f'\nDo you want to mount the data directory now?', default=True):
-                # Initialize ProjectService with mount_ensure=False to prevent auto-mount
-                project_service = ProjectService(mount_ensure=False)
+                # Initialize ProjectService with mount_ensure=None to skip validation (we're about to mount)
+                project_service = ProjectService(mount_ensure=None)
 
                 # Attempt to mount
                 if project_service.mount():
@@ -738,8 +769,8 @@ def mount_project():
     Example:
         oryxforge admin mount
     """
-    # Initialize ProjectService with mount_ensure=False to prevent auto-mount
-    project_service = ProjectService(mount_ensure=False)
+    # Initialize ProjectService with mount_ensure=None to skip validation (we're about to mount)
+    project_service = ProjectService(mount_ensure=None)
 
     # Attempt to mount
     if project_service.mount():
@@ -765,8 +796,8 @@ def unmount_project():
     Example:
         oryxforge admin unmount
     """
-    # Initialize ProjectService with mount_ensure=False to prevent auto-mount
-    project_service = ProjectService(mount_ensure=False)
+    # Initialize ProjectService with mount_ensure=None to skip validation (we're about to unmount)
+    project_service = ProjectService(mount_ensure=None)
 
     # Attempt to unmount
     if project_service.unmount():

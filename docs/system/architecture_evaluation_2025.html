@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>architecture_evaluation_2025</title>
+  <style>
+html {
+color: #1a1a1a;
+background-color: #fdfdfd;
+}
+body {
+margin: 0 auto;
+max-width: 36em;
+padding-left: 50px;
+padding-right: 50px;
+padding-top: 50px;
+padding-bottom: 50px;
+hyphens: auto;
+overflow-wrap: break-word;
+text-rendering: optimizeLegibility;
+font-kerning: normal;
+}
+@media (max-width: 600px) {
+body {
+font-size: 0.9em;
+padding: 12px;
+}
+h1 {
+font-size: 1.8em;
+}
+}
+@media print {
+html {
+background-color: white;
+}
+body {
+background-color: transparent;
+color: black;
+font-size: 12pt;
+}
+p, h2, h3 {
+orphans: 3;
+widows: 3;
+}
+h2, h3, h4 {
+page-break-after: avoid;
+}
+}
+p {
+margin: 1em 0;
+}
+a {
+color: #1a1a1a;
+}
+a:visited {
+color: #1a1a1a;
+}
+img {
+max-width: 100%;
+}
+svg {
+height: auto;
+max-width: 100%;
+}
+h1, h2, h3, h4, h5, h6 {
+margin-top: 1.4em;
+}
+h5, h6 {
+font-size: 1em;
+font-style: italic;
+}
+h6 {
+font-weight: normal;
+}
+ol, ul {
+padding-left: 1.7em;
+margin-top: 1em;
+}
+li > ol, li > ul {
+margin-top: 0;
+}
+blockquote {
+margin: 1em 0 1em 1.7em;
+padding-left: 1em;
+border-left: 2px solid #e6e6e6;
+color: #606060;
+}
+code {
+font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+font-size: 85%;
+margin: 0;
+hyphens: manual;
+}
+pre {
+margin: 1em 0;
+overflow: auto;
+}
+pre code {
+padding: 0;
+overflow: visible;
+overflow-wrap: normal;
+}
+.sourceCode {
+background-color: transparent;
+overflow: visible;
+}
+hr {
+background-color: #1a1a1a;
+border: none;
+height: 1px;
+margin: 1em 0;
+}
+table {
+margin: 1em 0;
+border-collapse: collapse;
+width: 100%;
+overflow-x: auto;
+display: block;
+font-variant-numeric: lining-nums tabular-nums;
+}
+table caption {
+margin-bottom: 0.75em;
+}
+tbody {
+margin-top: 0.5em;
+border-top: 1px solid #1a1a1a;
+border-bottom: 1px solid #1a1a1a;
+}
+th {
+border-top: 1px solid #1a1a1a;
+padding: 0.25em 0.5em 0.25em 0.5em;
+}
+td {
+padding: 0.125em 0.5em 0.25em 0.5em;
+}
+header {
+margin-bottom: 4em;
+text-align: center;
+}
+#TOC li {
+list-style: none;
+}
+#TOC ul {
+padding-left: 1.3em;
+}
+#TOC > ul {
+padding-left: 0;
+}
+#TOC a:not(:hover) {
+text-decoration: none;
+}
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+</head>
+<body>
+<section id="oryxforge-architecture-evaluation" class="level1">
+<h1>OryxForge Architecture Evaluation</h1>
+<p><strong>Date</strong>: 2025-11-02 <strong>Evaluator</strong>: Senior System Architect Analysis <strong>Scope</strong>: Context Management, Service Architecture, Environment Detection</p>
+<hr />
+<section id="executive-summary" class="level2">
+<h2>Executive Summary</h2>
+<p>This evaluation analyzes the OryxForge AI data analysis backend architecture with focus on context management, resource initialization, and multi-environment deployment. The analysis covers user and system actions across four deployment environments (CLI, Local API Dev, GCP Production, Test Mode) and evaluates how resources (working directories, mount points, configuration files, ProjectContext) flow through 13 services.</p>
+<p><strong>Key Findings</strong>: - ✅ <strong>Strengths</strong>: Zero-parameter service pattern, thread-safe context management, serverless-ready architecture - ⚠️ <strong>Critical Issues</strong>: 5 architectural problems causing user-facing failures (e.g., “mount suggest” command failures) - 🎯 <strong>Recommendations</strong>: Centralized environment detection, symlink strategy, simplified initialization flow</p>
+<hr />
+</section>
+<section id="environment-action-resource-flow-analysis" class="level2">
+<h2>1. Environment-Action-Resource Flow Analysis</h2>
+<section id="four-deployment-environments" class="level3">
+<h3>1.1 Four Deployment Environments</h3>
+<table>
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 14%" />
+<col style="width: 25%" />
+<col style="width: 20%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr>
+<th>Environment</th>
+<th>Detection</th>
+<th>Working Directory</th>
+<th>Config Source</th>
+<th>Mount Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CLI Mode</strong></td>
+<td>No env vars set</td>
+<td><code>os.getcwd()</code></td>
+<td><code>.oryxforge.cfg</code> in cwd</td>
+<td>Required, validated</td>
+</tr>
+<tr>
+<td><strong>Local API Dev</strong></td>
+<td><code>ORYX_MOUNT_ROOT</code> set</td>
+<td><code>{ORYX_MOUNT_ROOT}/mnt/projects/{user}/{project}</code></td>
+<td>Context-based (no file)</td>
+<td>Mount parent checked</td>
+</tr>
+<tr>
+<td><strong>GCP Production</strong></td>
+<td><code>GOOGLE_CLOUD_PROJECT</code> set</td>
+<td><code>/tmp/{user_id}/{project_id}</code></td>
+<td>Context-based (no file)</td>
+<td>Mount parent checked</td>
+</tr>
+<tr>
+<td><strong>Test Mode</strong></td>
+<td>Path contains “temp” or “test”</td>
+<td><code>tempfile.TemporaryDirectory()</code></td>
+<td>Temp config file</td>
+<td>Skipped entirely</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Environment Detection Logic</strong> (from <code>env_config.py:ProjectContext.is_api_mode()</code>):</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> is_api_mode() <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Detect if running in API mode (GCP or local API development).&quot;&quot;&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">bool</span>(</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        os.environ.get(<span class="st">&#39;GOOGLE_CLOUD_PROJECT&#39;</span>) <span class="kw">or</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        os.environ.get(<span class="st">&#39;FASTAPI_ENV&#39;</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div>
+</section>
+<section id="resource-flow-matrix-cli-mode" class="level3">
+<h3>1.2 Resource Flow Matrix: CLI Mode</h3>
+<table>
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 20%" />
+<col style="width: 36%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>User Action</th>
+<th>System Actions</th>
+<th>Resources Created/Modified</th>
+<th>Services Involved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>oryxforge admin pull</code></td>
+<td>1. Validate credentials<br>2. Clone GitLab repo<br>3. Write <code>.oryxforge.cfg</code></td>
+<td>- Cloned repo dir<br>- <code>.oryxforge.cfg</code> with [profile]</td>
+<td>CLIService, RepoService, ProjectContext</td>
+</tr>
+<tr>
+<td><code>cd &lt;cloned-dir&gt;</code></td>
+<td>User navigation</td>
+<td>- Current working directory changes</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td><code>oryxforge admin config mount suggest &lt;base&gt;</code></td>
+<td>1. Read profile from <code>.oryxforge.cfg</code> in <strong>cwd</strong><br>2. Construct path: <code>{base}/{user}/{project}/data</code><br>3. Display suggestion</td>
+<td>- No files modified</td>
+<td>CLIService, ConfigService, CredentialsManager</td>
+</tr>
+<tr>
+<td><code>oryxforge admin config mount set &lt;path&gt;</code></td>
+<td>1. Write <code>[mount]</code> section to <code>.oryxforge.cfg</code><br>2. Set <code>mount_point</code> and <code>mount_ensure=true</code></td>
+<td>- <code>.oryxforge.cfg</code> updated</td>
+<td>ConfigService</td>
+</tr>
+<tr>
+<td><code>oryxforge admin mount</code></td>
+<td>1. Read mount config<br>2. Run <code>rclone mount</code> command<br>3. Background process</td>
+<td>- Mount process running<br>- GCS bucket accessible at mount_point</td>
+<td>ProjectService, MountService</td>
+</tr>
+<tr>
+<td><code>oryxforge activate &lt;dataset&gt;.&lt;sheet&gt;</code></td>
+<td>1. Query Supabase for dataset/sheet<br>2. Write <code>[active]</code> section to <code>.oryxforge.cfg</code><br>3. Initialize ProjectContext</td>
+<td>- <code>.oryxforge.cfg</code> updated<br>- ProjectContext set</td>
+<td>CLIService, ProjectService, ConfigService</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Critical Failure Point</strong>: <code>admin config mount suggest</code> fails if user hasn’t <code>cd</code> into cloned directory because: - <code>admin pull</code> clones to directory A - User stays in directory B (original cwd) - <code>admin config mount suggest</code> looks for <code>.oryxforge.cfg</code> in cwd (directory B) - Config file is in directory A (cloned dir)</p>
+<p><strong>Code Evidence</strong> (<code>cli_service.py:28-30</code>):</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, user_id: <span class="bu">str</span> <span class="op">=</span> <span class="va">None</span>, cwd: <span class="bu">str</span> <span class="op">=</span> <span class="va">None</span>):</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.cwd <span class="op">=</span> Path(cwd) <span class="cf">if</span> cwd <span class="cf">else</span> Path.cwd()  <span class="co"># ← Uses cwd, not working_dir</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">self</span>.creds_manager <span class="op">=</span> CredentialsManager(working_dir<span class="op">=</span><span class="bu">str</span>(<span class="va">self</span>.cwd))</span></code></pre></div>
+</section>
+<section id="resource-flow-matrix-api-mode-local-gcp" class="level3">
+<h3>1.3 Resource Flow Matrix: API Mode (Local &amp; GCP)</h3>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 21%" />
+<col style="width: 18%" />
+<col style="width: 21%" />
+<col style="width: 21%" />
+</colgroup>
+<thead>
+<tr>
+<th>API Endpoint</th>
+<th>Request Parameters</th>
+<th>System Actions</th>
+<th>Resources Accessed</th>
+<th>Services Involved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Startup Event</strong></td>
+<td>N/A</td>
+<td>1. Check parent mount exists<br>2. Log success or raise error</td>
+<td>- <code>/mnt/data</code> (parent dir)</td>
+<td>ProjectContext</td>
+</tr>
+<tr>
+<td><code>/profile/set</code></td>
+<td><code>user_id</code>, <code>project_id</code></td>
+<td>1. Write <code>.oryxforge.cfg</code> to working dir<br>2. Create [profile] section</td>
+<td>- Working dir config file</td>
+<td>CredentialsManager, ConfigService</td>
+</tr>
+<tr>
+<td><code>/data/load-dataframe</code></td>
+<td><code>user_id</code>, <code>project_id</code>, <code>name_python</code></td>
+<td>1. Call <code>ProjectService.project_init()</code><br>2. Validate mount at <strong>project level</strong><br>3. Clone/pull repo<br>4. Write config<br>5. Load Parquet file</td>
+<td>- <code>/mnt/data/{user}/{project}</code> (project dir)<br>- Cloned repo<br>- <code>.oryxforge.cfg</code><br>- Parquet file from mount</td>
+<td>ProjectService, RepoService, IOService</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Critical Inconsistency</strong>: Mount checking happens at TWO different levels: - <strong>Startup</strong>: Checks <code>/mnt/data</code> (parent directory) - <strong>Per-request</strong>: Checks <code>/mnt/data/{user_id}/{project_id}</code> (project-specific directory)</p>
+<p><strong>Code Evidence</strong> (<code>app.py:44-54</code> vs <code>project_service.py:_get_mount_check_path()</code>):</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># API Startup (app.py)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>mount_parent <span class="op">=</span> ProjectContext.get_mount_parent_path()  <span class="co"># Returns &quot;/mnt/data&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="kw">not</span> os.path.exists(mount_parent):</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f&quot;Parent mount directory &#39;</span><span class="sc">{</span>mount_parent<span class="sc">}</span><span class="ss">&#39; does not exist&quot;</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Per-request (project_service.py)</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> _get_mount_check_path(<span class="va">self</span>):</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Different paths for API vs CLI mode.&quot;&quot;&quot;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> ProjectContext.is_api_mode():</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>        <span class="co"># API: Check parent level</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ProjectContext.get_mount_parent_path()</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        <span class="co"># CLI: Check project-specific level</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Path(<span class="va">self</span>.mount_point) <span class="op">/</span> <span class="va">self</span>.user_id <span class="op">/</span> <span class="va">self</span>.project_id</span></code></pre></div>
+<p><strong>Problem</strong>: If parent exists but user-specific directory doesn’t, startup succeeds but requests fail.</p>
+</section>
+<section id="resource-flow-project-initialization-api-mode" class="level3">
+<h3>1.4 Resource Flow: Project Initialization (API Mode)</h3>
+<p><strong>Sequence Diagram</strong> for <code>/data/load-dataframe</code> endpoint:</p>
+<pre><code>Client → FastAPI: POST /data/load-dataframe
+                   {user_id, project_id, name_python}
+
+FastAPI → ProjectService.project_init(project_id, user_id)
+          ↓
+          ProjectContext.set(working_dir=None, user_id, project_id, write_config=False)
+          ↓ (determines working_dir based on environment)
+          ↓ GCP: /tmp/{user}/{project}
+          ↓ Local API: {ORYX_MOUNT_ROOT}/mnt/projects/{user}/{project}
+          ↓
+          RepoService.ensure_repo()  # Clone or pull
+          ↓
+          ProjectContext.write_config()  # Write .oryxforge.cfg
+          ↓
+          ConfigService initialized with working_dir
+          ↓
+          ProjectService.__init__(project_id, user_id)
+          ├─ Read [mount] from .oryxforge.cfg (just created)
+          ├─ _initialize_resources()
+          │  ├─ Validate project exists in Supabase
+          │  ├─ Check mount at parent level
+          │  └─ Configure d6tflow.settings.data_dir
+          └─ Return
+
+FastAPI → IOService.load_df_pd(name_python)
+          ↓
+          Load from: {mount_point}/{user}/{project}/data/{dataset}/{sheet}.parquet
+          ↓
+FastAPI → Client: DataFrame as JSON</code></pre>
+<p><strong>Two-Phase Initialization Issue</strong>: 1. <strong>Phase 1</strong>: <code>ProjectContext.set(write_config=False)</code> - Context set but no config file 2. <strong>Intermediate</strong>: Repo clone (may fail due to network, credentials, etc.) 3. <strong>Phase 2</strong>: <code>ProjectContext.write_config()</code> - Config file written 4. <strong>Problem</strong>: If Phase 2 fails, system is in inconsistent state (context set, no config)</p>
+</section>
+<section id="resource-flow-import-data-workflow" class="level3">
+<h3>1.5 Resource Flow: Import Data Workflow</h3>
+<p><strong>CLI Command</strong>: <code>oryxforge import &lt;file_path&gt;</code></p>
+<table>
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 23%" />
+<col style="width: 26%" />
+<col style="width: 32%" />
+</colgroup>
+<thead>
+<tr>
+<th>Step</th>
+<th>Action</th>
+<th>Service</th>
+<th>Resources</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>User runs command</td>
+<td>CLI</td>
+<td>Command args</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Initialize CLIService</td>
+<td>CLIService</td>
+<td>Reads <code>.oryxforge.cfg</code> from cwd</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Check if file is remote (Supabase)</td>
+<td>ImportService</td>
+<td>Parse URI</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Download file if remote</td>
+<td>ImportService</td>
+<td>Temp download file</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Initialize ProjectService (with mount validation)</td>
+<td>ProjectService</td>
+<td>Mount check, config read</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Analyze file with Claude Agent</td>
+<td>ClaudeAgent</td>
+<td>API call to Claude</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Load file with pandas (Excel, CSV, etc.)</td>
+<td>ImportService</td>
+<td>Local file read</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Create “Sources” dataset if not exists</td>
+<td>ProjectService</td>
+<td>Supabase insert/query</td>
+</tr>
+<tr>
+<td>9</td>
+<td>For each sheet: Save as Parquet</td>
+<td>IOService</td>
+<td>Write to <code>{mount}/{user}/{project}/data/{dataset}/{sheet}.parquet</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td>Create datasheet records</td>
+<td>ProjectService</td>
+<td>Supabase inserts</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Display success message</td>
+<td>CLI</td>
+<td>Console output</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Critical Dependencies</strong>: - Mount must be established before Step 9 (Parquet write) - ProjectContext must be set with correct working_dir - Config file must exist with [profile] section</p>
+</section>
+<section id="resource-flow-chat-workflow" class="level3">
+<h3>1.6 Resource Flow: Chat Workflow</h3>
+<p><strong>CLI Command</strong>: <code>oryxforge chat &quot;&lt;prompt&gt;&quot;</code></p>
+<table>
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 23%" />
+<col style="width: 26%" />
+<col style="width: 32%" />
+</colgroup>
+<thead>
+<tr>
+<th>Step</th>
+<th>Action</th>
+<th>Service</th>
+<th>Resources</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>User runs chat command</td>
+<td>CLI</td>
+<td>Command args</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Load active context</td>
+<td>CLIService</td>
+<td>Read <code>[active]</code> from <code>.oryxforge.cfg</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Initialize ChatService</td>
+<td>ChatService</td>
+<td>ProjectContext</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Query chat history</td>
+<td>ChatService</td>
+<td>Supabase <code>chat_messages</code> table (session_id = project_id)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Build system prompt with mode</td>
+<td>ChatService</td>
+<td>Read <code>[active].mode</code> from config</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Send prompt + history to Claude</td>
+<td>ClaudeAgent</td>
+<td>API call with streaming</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Stream response to console</td>
+<td>CLI</td>
+<td>Real-time output</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Parse response for dataset.sheet</td>
+<td>ChatService</td>
+<td>Regex extraction</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Save user + assistant messages</td>
+<td>ChatService</td>
+<td>Supabase inserts</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Update active sheet if changed</td>
+<td>CLIService</td>
+<td>Write <code>[active]</code> section</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Session Continuity</strong>: <code>session_id = project_id</code> ensures conversations persist across CLI invocations within same project.</p>
+<hr />
+</section>
+</section>
+<section id="architectural-issues" class="level2">
+<h2>2. Architectural Issues</h2>
+<section id="issue-1-complex-environment-detection-scattered-across-services" class="level3">
+<h3>Issue 1: Complex Environment Detection Scattered Across Services</h3>
+<p><strong>Severity</strong>: Medium <strong>Impact</strong>: Hard to understand, test, and modify environment-specific behavior <strong>Location</strong>: Multiple services (ProjectContext, ProjectService, ConfigService)</p>
+<p><strong>Problem Description</strong>: Environment detection logic is duplicated and scattered: - <code>ProjectContext.is_api_mode()</code> checks for GCP or FASTAPI_ENV - <code>ProjectContext.is_test_mode()</code> checks working_dir path - <code>ProjectService._get_mount_check_path()</code> has conditional logic - <code>ConfigService</code> behavior differs per environment but isn’t explicitly aware</p>
+<p><strong>Code Evidence</strong>:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># env_config.py:60-65</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> is_api_mode() <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">bool</span>(</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>        os.environ.get(<span class="st">&#39;GOOGLE_CLOUD_PROJECT&#39;</span>) <span class="kw">or</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        os.environ.get(<span class="st">&#39;FASTAPI_ENV&#39;</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co"># env_config.py:67-73</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> is_test_mode(working_dir: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    working_dir_lower <span class="op">=</span> <span class="bu">str</span>(working_dir).lower()</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (<span class="st">&#39;temp&#39;</span> <span class="kw">in</span> working_dir_lower <span class="kw">or</span> <span class="st">&#39;test&#39;</span> <span class="kw">in</span> working_dir_lower)</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="co"># project_service.py:_get_mount_check_path() (line ~800)</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> _get_mount_check_path(<span class="va">self</span>):</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> ProjectContext.is_api_mode():</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ProjectContext.get_mount_parent_path()</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Path(<span class="va">self</span>.mount_point) <span class="op">/</span> <span class="va">self</span>.user_id <span class="op">/</span> <span class="va">self</span>.project_id</span></code></pre></div>
+<p><strong>Consequence</strong>: - Hard to add new environments (e.g., Docker, Kubernetes) - Behavior changes scattered across multiple files - No single source of truth for environment configuration</p>
+<p><strong>Recommendation</strong>: Create centralized <code>EnvironmentConfig</code> class:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> EnvironmentType(Enum):</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    CLI <span class="op">=</span> <span class="st">&quot;cli&quot;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    LOCAL_API <span class="op">=</span> <span class="st">&quot;local_api&quot;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    GCP_PRODUCTION <span class="op">=</span> <span class="st">&quot;gcp_production&quot;</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    TEST <span class="op">=</span> <span class="st">&quot;test&quot;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> EnvironmentConfig:</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">@staticmethod</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> detect() <span class="op">-&gt;</span> EnvironmentType:</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;Single source of truth for environment detection.&quot;&quot;&quot;</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="st">&#39;GOOGLE_CLOUD_PROJECT&#39;</span> <span class="kw">in</span> os.environ:</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> EnvironmentType.GCP_PRODUCTION</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> <span class="st">&#39;ORYX_MOUNT_ROOT&#39;</span> <span class="kw">in</span> os.environ <span class="kw">or</span> <span class="st">&#39;FASTAPI_ENV&#39;</span> <span class="kw">in</span> os.environ:</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> EnvironmentType.LOCAL_API</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> <span class="st">&#39;PYTEST_CURRENT_TEST&#39;</span> <span class="kw">in</span> os.environ:</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> EnvironmentType.TEST</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> EnvironmentType.CLI</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">@staticmethod</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_working_dir(env_type: EnvironmentType, user_id: <span class="bu">str</span>, project_id: <span class="bu">str</span>) <span class="op">-&gt;</span> Path:</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;Environment-specific working directory logic.&quot;&quot;&quot;</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> env_type <span class="op">==</span> EnvironmentType.GCP_PRODUCTION:</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> Path(<span class="ss">f&quot;/tmp/</span><span class="sc">{</span>user_id<span class="sc">}</span><span class="ss">/</span><span class="sc">{</span>project_id<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> env_type <span class="op">==</span> EnvironmentType.LOCAL_API:</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>            root <span class="op">=</span> os.environ.get(<span class="st">&#39;ORYX_MOUNT_ROOT&#39;</span>, <span class="st">&#39;/mnt/data&#39;</span>)</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> Path(<span class="ss">f&quot;</span><span class="sc">{</span>root<span class="sc">}</span><span class="ss">/projects/</span><span class="sc">{</span>user_id<span class="sc">}</span><span class="ss">/</span><span class="sc">{</span>project_id<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:  <span class="co"># CLI or </span><span class="al">TEST</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> Path.cwd()</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">@staticmethod</span></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> needs_mount_validation(env_type: EnvironmentType) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>        <span class="co">&quot;&quot;&quot;Whether mount validation is required in this environment.&quot;&quot;&quot;</span></span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> env_type <span class="kw">in</span> [EnvironmentType.CLI, EnvironmentType.LOCAL_API, EnvironmentType.GCP_PRODUCTION]</span></code></pre></div>
+<p><strong>Benefits</strong>: - Single place to modify environment logic - Explicit environment types (no scattered booleans) - Easy to test different environments - Clear documentation of environment behaviors</p>
+<hr />
+</section>
+<section id="issue-2-fragile-two-phase-initialization-can-leave-inconsistent-state" class="level3">
+<h3>Issue 2: Fragile Two-Phase Initialization Can Leave Inconsistent State</h3>
+<p><strong>Severity</strong>: High <strong>Impact</strong>: System failures leave ProjectContext set but no config file, causing downstream confusion <strong>Location</strong>: <code>project_service.py:ProjectService.project_init()</code>, <code>env_config.py:ProjectContext</code></p>
+<p><strong>Problem Description</strong>: Project initialization uses two-phase pattern that can fail midway:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Phase 1: Set context WITHOUT writing config</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>ProjectContext.<span class="bu">set</span>(working_dir, user_id, project_id, write_config<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Intermediate: Clone repo (CAN FAIL - network, auth, GitLab API)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>repo_service.ensure_repo()</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Phase 2: Write config AFTER clone</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>ProjectContext.write_config()</span></code></pre></div>
+<p><strong>Failure Scenarios</strong>:</p>
+<table>
+<colgroup>
+<col style="width: 35%" />
+<col style="width: 33%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Failure Point</th>
+<th>System State</th>
+<th>User Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Between Phase 1 &amp; 2</td>
+<td>Context set, no config file</td>
+<td>Next service call reads context but can’t find config</td>
+</tr>
+<tr>
+<td>During repo clone</td>
+<td>Context set, partial clone</td>
+<td>Repo in invalid state, context thinks it’s ready</td>
+</tr>
+<tr>
+<td>After Phase 2, before service init</td>
+<td>Config written but mount not checked</td>
+<td>Service assumes mount is ready when it’s not</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Code Evidence</strong> (<code>project_service.py:120-145</code>):</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> project_init(project_id: <span class="bu">str</span>, user_id: <span class="bu">str</span>, target_dir: <span class="bu">str</span> <span class="op">=</span> <span class="va">None</span>) <span class="op">-&gt;</span> <span class="st">&#39;ProjectService&#39;</span>:</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Phase 1: Set context (in-memory only)</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    working_dir <span class="op">=</span> ProjectContext.<span class="bu">set</span>(</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        user_id<span class="op">=</span>user_id,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>        project_id<span class="op">=</span>project_id,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>        target_dir<span class="op">=</span>target_dir,</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>        write_config<span class="op">=</span><span class="va">False</span>  <span class="co"># ← No config file yet</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Intermediate: Clone/pull repo (CAN FAIL)</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    repo_service <span class="op">=</span> RepoService()</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    repo_service.ensure_repo(user_id<span class="op">=</span>user_id, project_id<span class="op">=</span>project_id)</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Phase 2: Now write config</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    ProjectContext.write_config()  <span class="co"># ← If clone failed, this shouldn&#39;t happen</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Service initialization (reads config that was just written)</span></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> ProjectService(project_id<span class="op">=</span>project_id, user_id<span class="op">=</span>user_id)</span></code></pre></div>
+<p><strong>Real-World Failure Example</strong>:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 1: User runs data load API</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">POST</span> /data/load-dataframe {<span class="st">&quot;user_id&quot;</span>: <span class="st">&quot;abc&quot;</span>, <span class="st">&quot;project_id&quot;</span>: <span class="st">&quot;xyz&quot;</span>, <span class="st">&quot;name_python&quot;</span>: <span class="st">&quot;sales.Q1&quot;</span>}</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 2: ProjectContext.set() succeeds</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co"># working_dir = /tmp/abc/xyz</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Context stored in ContextVar</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 3: repo_service.ensure_repo() FAILS (network timeout)</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="ex">Exception:</span> <span class="st">&quot;Failed to connect to GitLab API&quot;</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 4: ProjectContext.write_config() NEVER CALLED</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a><span class="co"># But ProjectContext still has working_dir=&quot;/tmp/abc/xyz&quot; set!</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 5: Next API call tries to read config</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="ex">ConfigService</span><span class="er">(</span><span class="va">working_dir</span><span class="op">=</span><span class="st">&quot;/tmp/abc/xyz&quot;</span><span class="kw">)</span>  <span class="co"># ← Path exists from previous attempt</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a><span class="ex">config.get</span><span class="er">(</span><span class="st">&#39;mount&#39;</span><span class="ex">,</span> <span class="st">&#39;mount_point&#39;</span><span class="kw">)</span>  <span class="co"># ← Returns None, config file doesn&#39;t exist</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Result: Confusing error &quot;mount_point not configured&quot; even though init was called</span></span></code></pre></div>
+<p><strong>Recommendation</strong>: Use atomic initialization with transaction-like pattern:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> project_init(project_id: <span class="bu">str</span>, user_id: <span class="bu">str</span>, target_dir: <span class="bu">str</span> <span class="op">=</span> <span class="va">None</span>) <span class="op">-&gt;</span> <span class="st">&#39;ProjectService&#39;</span>:</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Initialize project with atomic operation - either fully succeeds or fully rolls back.&quot;&quot;&quot;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Determine working_dir without setting context yet</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> target_dir:</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        working_dir <span class="op">=</span> Path(target_dir)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>        env_type <span class="op">=</span> EnvironmentConfig.detect()</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>        working_dir <span class="op">=</span> EnvironmentConfig.get_working_dir(env_type, user_id, project_id)</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Step 1: Ensure repo exists (can fail)</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>        repo_service <span class="op">=</span> RepoService()</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>        repo_service.ensure_repo(</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>            user_id<span class="op">=</span>user_id,</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>            project_id<span class="op">=</span>project_id,</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>            target_dir<span class="op">=</span><span class="bu">str</span>(working_dir)</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Step 2: Only NOW set context and write config (atomic)</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>        working_dir_final <span class="op">=</span> ProjectContext.<span class="bu">set</span>(</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>            user_id<span class="op">=</span>user_id,</span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>            project_id<span class="op">=</span>project_id,</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>            target_dir<span class="op">=</span><span class="bu">str</span>(working_dir),</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>            write_config<span class="op">=</span><span class="va">True</span>  <span class="co"># ← Write immediately</span></span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Step 3: Initialize service (reads config that definitely exists)</span></span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ProjectService(project_id<span class="op">=</span>project_id, user_id<span class="op">=</span>user_id)</span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Rollback: Clear context if anything failed</span></span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>        ProjectContext.clear()</span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>        logger.error(<span class="ss">f&quot;Project initialization failed, context rolled back: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span></span></code></pre></div>
+<p><strong>Benefits</strong>: - All-or-nothing initialization - Clear error messages (no partial state) - Context only set if everything succeeds - Automatic rollback on failure</p>
+<hr />
+</section>
+<section id="issue-3-mount-point-configuration-ux-is-confusing-and-error-prone" class="level3">
+<h3>Issue 3: Mount Point Configuration UX is Confusing and Error-Prone</h3>
+<p><strong>Severity</strong>: High <strong>Impact</strong>: Users frequently fail to configure mount correctly, blocking all data operations <strong>Location</strong>: CLI command flow, CLIService, ConfigService</p>
+<p><strong>Problem Description</strong>: Current mount configuration requires 3-4 separate commands with manual directory navigation:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 1: Clone repo</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="ex">oryxforge</span> admin pull</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Creates directory: /some/path/project-abc123</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 2: User MUST manually cd into cloned directory</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /some/path/project-abc123</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 3: Suggest mount point</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="ex">oryxforge</span> admin config mount suggest <span class="st">&quot;D:\data\oryx-forge-projects&quot;</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Fails if user forgot Step 2!</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 4: Set mount point</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="ex">oryxforge</span> admin config mount set <span class="st">&quot;D:\data\oryx-forge-projects\user-abc\project-xyz\data&quot;</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 5: Actually mount</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="ex">oryxforge</span> admin mount</span></code></pre></div>
+<p><strong>Failure Causes</strong>:</p>
+<ol type="1">
+<li><strong>User forgets to <code>cd</code></strong>:
+<ul>
+<li><code>admin pull</code> clones to <code>/repos/project-123</code></li>
+<li>User stays in <code>/original-dir</code></li>
+<li><code>admin config mount suggest</code> looks for <code>.oryxforge.cfg</code> in <code>/original-dir</code></li>
+<li><strong>Error</strong>: “Config file not found” or reads wrong config</li>
+</ul></li>
+<li><strong>Config file location ambiguity</strong>:
+<ul>
+<li>After <code>admin pull</code>, config is in <strong>cloned directory</strong></li>
+<li><code>CLIService.__init__</code> uses <code>Path.cwd()</code> not working_dir from clone</li>
+<li>User must manually navigate to correct directory</li>
+</ul></li>
+<li><strong>No validation of mount base</strong>:
+<ul>
+<li>User provides <code>D:\data</code> as base</li>
+<li>System builds <code>D:\data\{user}\{project}\data</code></li>
+<li>If <code>D:\data</code> doesn’t exist or isn’t writable, no early warning</li>
+</ul></li>
+</ol>
+<p><strong>Code Evidence</strong> (<code>cli_service.py:132-156</code>):</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mount_point_suggest(<span class="va">self</span>, mount_base: <span class="bu">str</span> <span class="op">=</span> <span class="va">None</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Suggest a mount point path for the current user and project.</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="co">    This method is called AFTER admin pull, but CLIService.__init__ uses:</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="co">        self.cwd = Path(cwd) if cwd else Path.cwd()</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="co">    So if user hasn&#39;t &#39;cd&#39; into cloned dir, profile lookup fails!</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> mount_base:</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">&quot;mount_base is required&quot;</span>)</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="co"># This reads from self.creds_manager which uses self.cwd</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    profile <span class="op">=</span> <span class="va">self</span>.creds_manager.get_profile()  <span class="co"># ← FAILS if cwd != cloned dir</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> profile <span class="kw">or</span> <span class="kw">not</span> profile.get(<span class="st">&#39;user_id&#39;</span>) <span class="kw">or</span> <span class="kw">not</span> profile.get(<span class="st">&#39;project_id&#39;</span>):</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;Profile not configured. Run &#39;oryxforge admin pull&#39; first &quot;</span></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;and ensure you&#39;re in the project directory.&quot;</span>  <span class="co"># ← Confusing error message</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    suggested_path <span class="op">=</span> Path(mount_base) <span class="op">/</span> profile[<span class="st">&#39;user_id&#39;</span>] <span class="op">/</span> profile[<span class="st">&#39;project_id&#39;</span>] <span class="op">/</span> <span class="st">&#39;data&#39;</span></span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">str</span>(suggested_path)</span></code></pre></div>
+<p><strong>User Experience</strong>:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> oryxforge admin pull</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">✓</span> Repo cloned to: D:<span class="dt">\r</span>epos<span class="dt">\m</span>y-project-abc123</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> oryxforge admin config mount suggest <span class="st">&quot;D:\data&quot;</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="ex">✗</span> Error: Profile not configured. Run <span class="st">&#39;oryxforge admin pull&#39;</span> first and ensure you<span class="st">&#39;re in the project directory.</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="st"># User is confused: &quot;But I just ran admin pull!&quot;</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="st">$ cd D:\repos\my-project-abc123</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="st">$ oryxforge admin config mount suggest &quot;D:\data&quot;</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="st">✓ Suggested mount point: D:\data\user-abc\project-123\data</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="st"># Finally works!</span></span></code></pre></div>
+<p><strong>Recommendation 1: Single-Command Configuration</strong></p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># New CLI command combining pull + mount setup</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="at">@click.command</span>()</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="at">@click.argument</span>(<span class="st">&#39;mount_base&#39;</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> admin_setup(mount_base: <span class="bu">str</span>):</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Clone repo and configure mount in single command.</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="co">    Usage:</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="co">        oryxforge admin setup D:/data/projects</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a><span class="co">    This command will:</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="co">    1. Clone the GitLab repository</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="co">    2. Configure mount point automatically</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="co">    3. Display next steps (mount command)</span></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>    cli_service <span class="op">=</span> CLIService()</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 1: Pull (clone) repo</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    repo_path <span class="op">=</span> cli_service.pull()</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    logger.success(<span class="ss">f&quot;Repository cloned to: </span><span class="sc">{</span>repo_path<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 2: Change working directory in-memory</span></span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    cli_service.cwd <span class="op">=</span> Path(repo_path)</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>    cli_service.creds_manager <span class="op">=</span> CredentialsManager(working_dir<span class="op">=</span><span class="bu">str</span>(repo_path))</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Step 3: Auto-suggest and set mount</span></span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>    profile <span class="op">=</span> cli_service.creds_manager.get_profile()</span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>    suggested_mount <span class="op">=</span> Path(mount_base) <span class="op">/</span> profile[<span class="st">&#39;user_id&#39;</span>] <span class="op">/</span> profile[<span class="st">&#39;project_id&#39;</span>] <span class="op">/</span> <span class="st">&#39;data&#39;</span></span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>    cli_service.mount_point_set(<span class="bu">str</span>(suggested_mount))</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>    logger.success(<span class="ss">f&quot;Mount point configured: </span><span class="sc">{</span>suggested_mount<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a>    logger.info(<span class="st">&quot;Next step: Run &#39;oryxforge admin mount&#39; to establish mount&quot;</span>)</span></code></pre></div>
+<p><strong>Recommendation 2: Symlink Strategy</strong> (from docs/system/context_mgmt.md)</p>
+<p>Create symlink in working directory pointing to mount:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> setup_mount_symlink(<span class="va">self</span>):</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Create symlink &#39;data&#39; in working_dir pointing to mount location.</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co">    This allows transparent access:</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="co">        working_dir/data/sales/Q1.parquet</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="co">    Instead of:</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="co">        {mount_base}/{user}/{project}/data/sales/Q1.parquet</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    working_dir <span class="op">=</span> Path(ProjectContext.get())</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    symlink <span class="op">=</span> working_dir <span class="op">/</span> <span class="st">&#39;data&#39;</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get mount location</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    config_service <span class="op">=</span> ConfigService()</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>    mount_point <span class="op">=</span> config_service.get(<span class="st">&#39;mount&#39;</span>, <span class="st">&#39;mount_point&#39;</span>)</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> mount_point:</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">&quot;Mount point not configured&quot;</span>)</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create symlink if doesn&#39;t exist</span></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> symlink.exists():</span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>        symlink.symlink_to(mount_point, target_is_directory<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>        logger.success(<span class="ss">f&quot;Created symlink: </span><span class="sc">{</span>symlink<span class="sc">}</span><span class="ss"> -&gt; </span><span class="sc">{</span>mount_point<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>        logger.debug(<span class="ss">f&quot;Symlink already exists: </span><span class="sc">{</span>symlink<span class="sc">}</span><span class="ss">&quot;</span>)</span></code></pre></div>
+<p><strong>Benefits of Symlink Approach</strong>: - Transparent mount access (users don’t need to know mount location) - Works across platforms (Windows, Linux, macOS) - Simplifies IOService (just use <code>working_dir/data/{dataset}/{sheet}</code>) - Easier to change mount backend without code changes</p>
+<hr />
+</section>
+<section id="issue-4-inconsistent-mount-checking-between-api-startup-and-per-request" class="level3">
+<h3>Issue 4: Inconsistent Mount Checking Between API Startup and Per-Request</h3>
+<p><strong>Severity</strong>: Medium <strong>Impact</strong>: API can start successfully but fail on first request <strong>Location</strong>: <code>app.py</code> startup event, <code>project_service.py:_initialize_resources()</code></p>
+<p><strong>Problem Description</strong>: Mount validation happens at TWO different directory levels:</p>
+<ol type="1">
+<li><strong>API Startup</strong> (<code>app.py:32-54</code>): Checks parent directory <code>/mnt/data</code></li>
+<li><strong>Per-Request</strong> (<code>project_service.py:_get_mount_check_path()</code>): Checks project directory <code>/mnt/data/{user}/{project}</code></li>
+</ol>
+<p><strong>Code Evidence</strong>:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># app.py:42-54 (API Startup)</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="at">@app.on_event</span>(<span class="st">&quot;startup&quot;</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> startup_event():</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> ProjectContext.is_api_mode():</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>        mount_parent <span class="op">=</span> ProjectContext.get_mount_parent_path()  <span class="co"># Returns &quot;/mnt/data&quot;</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> os.path.exists(mount_parent):</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">raise</span> <span class="pp">ValueError</span>(</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>                <span class="ss">f&quot;API startup failed: Parent mount directory &#39;</span><span class="sc">{</span>mount_parent<span class="sc">}</span><span class="ss">&#39; does not exist.&quot;</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        logger.success(<span class="ss">f&quot;Mount verified at API startup: </span><span class="sc">{</span>mount_parent<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="co"># project_service.py:_initialize_resources() (Per-Request)</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> _initialize_resources(<span class="va">self</span>):</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ... project validation ...</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Check mount</span></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    mount_check_path <span class="op">=</span> <span class="va">self</span>._get_mount_check_path()</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="va">self</span>.mount_ensure <span class="kw">and</span> <span class="kw">not</span> <span class="va">self</span>._is_test_mode():</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> os.path.exists(mount_check_path):</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">raise</span> <span class="pp">ValueError</span>(</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>                <span class="ss">f&quot;Mount point not accessible: </span><span class="sc">{</span>mount_check_path<span class="sc">}</span><span class="ss">. &quot;</span></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>                <span class="ss">f&quot;Ensure mount is established before operations.&quot;</span></span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> _get_mount_check_path(<span class="va">self</span>):</span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> ProjectContext.is_api_mode():</span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ProjectContext.get_mount_parent_path()  <span class="co"># Returns &quot;/mnt/data&quot;</span></span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> Path(<span class="va">self</span>.mount_point) <span class="op">/</span> <span class="va">self</span>.user_id <span class="op">/</span> <span class="va">self</span>.project_id  <span class="co"># Returns &quot;/mnt/data/{user}/{project}&quot;</span></span></code></pre></div>
+<p><strong>Wait, looking at the code more carefully</strong>: Both actually check the same path in API mode (parent level). But there’s still an inconsistency in <strong>CLI mode</strong> where startup isn’t relevant but per-request checks project-specific path.</p>
+<p><strong>Actual Problem</strong>: Mount checking logic is duplicated and the behavior differs: - API startup: Simple <code>os.path.exists()</code> check, raises ValueError - Per-request: Checks <code>mount_ensure</code> config flag, respects test mode, raises ValueError</p>
+<p><strong>Failure Scenario</strong>:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># API Startup</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>mount_parent <span class="op">=</span> <span class="st">&quot;/mnt/data&quot;</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>os.path.exists(mount_parent)  <span class="co"># → True (parent exists)</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co"># ✓ Startup succeeds</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="co"># First API Request: /data/load-dataframe</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>user_id <span class="op">=</span> <span class="st">&quot;user-abc&quot;</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>project_id <span class="op">=</span> <span class="st">&quot;project-xyz&quot;</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Per-request check (if API mode)</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>mount_check_path <span class="op">=</span> <span class="st">&quot;/mnt/data&quot;</span>  <span class="co"># Same as startup</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>os.path.exists(mount_check_path)  <span class="co"># → True</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="co"># But then IOService tries to load:</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>file_path <span class="op">=</span> <span class="ss">f&quot;/mnt/data/</span><span class="sc">{</span>user_id<span class="sc">}</span><span class="ss">/</span><span class="sc">{</span>project_id<span class="sc">}</span><span class="ss">/data/sales/Q1.parquet&quot;</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="co"># ✗ FileNotFoundError: /mnt/data/user-abc/project-xyz/data doesn&#39;t exist!</span></span></code></pre></div>
+<p><strong>Root Cause</strong>: Mount existence check doesn’t validate that <strong>user-project subdirectories</strong> exist, only that parent mount exists.</p>
+<p><strong>Recommendation</strong>:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> validate_mount_access(user_id: <span class="bu">str</span>, project_id: <span class="bu">str</span>, mount_base: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">bool</span>:</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Validate mount is accessible and user-project directory exists or can be created.</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="co">    Args:</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="co">        user_id: User UUID</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="co">        project_id: Project UUID</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="co">        mount_base: Base mount path (e.g., &quot;/mnt/data&quot;)</span></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="co">    Returns:</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="co">        True if mount is accessible and ready for use</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="co">    Raises:</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="co">        ValueError: If mount is not accessible or cannot be prepared</span></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>    mount_base_path <span class="op">=</span> Path(mount_base)</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Check 1: Parent mount exists and is accessible</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> mount_base_path.exists():</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f&quot;Mount base does not exist: </span><span class="sc">{</span>mount_base<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> os.access(mount_base_path, os.R_OK <span class="op">|</span> os.W_OK):</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f&quot;Mount base is not readable/writable: </span><span class="sc">{</span>mount_base<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Check 2: User directory exists or can be created</span></span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>    user_dir <span class="op">=</span> mount_base_path <span class="op">/</span> user_id</span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> user_dir.exists():</span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>            user_dir.mkdir(parents<span class="op">=</span><span class="va">True</span>, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>            logger.info(<span class="ss">f&quot;Created user directory: </span><span class="sc">{</span>user_dir<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>            <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f&quot;Cannot create user directory </span><span class="sc">{</span>user_dir<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Check 3: Project directory exists or can be created</span></span>
+<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a>    project_dir <span class="op">=</span> user_dir <span class="op">/</span> project_id <span class="op">/</span> <span class="st">&quot;data&quot;</span></span>
+<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> project_dir.exists():</span>
+<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb18-37"><a href="#cb18-37" aria-hidden="true" tabindex="-1"></a>            project_dir.mkdir(parents<span class="op">=</span><span class="va">True</span>, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb18-38"><a href="#cb18-38" aria-hidden="true" tabindex="-1"></a>            logger.info(<span class="ss">f&quot;Created project data directory: </span><span class="sc">{</span>project_dir<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-39"><a href="#cb18-39" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-40"><a href="#cb18-40" aria-hidden="true" tabindex="-1"></a>            <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f&quot;Cannot create project directory </span><span class="sc">{</span>project_dir<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-41"><a href="#cb18-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-42"><a href="#cb18-42" aria-hidden="true" tabindex="-1"></a>    logger.success(<span class="ss">f&quot;Mount validated and ready: </span><span class="sc">{</span>project_dir<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb18-43"><a href="#cb18-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">True</span></span></code></pre></div>
+<p><strong>Usage</strong>:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># API Startup</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="at">@app.on_event</span>(<span class="st">&quot;startup&quot;</span>)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> startup_event():</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> ProjectContext.is_api_mode():</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>        mount_base <span class="op">=</span> ProjectContext.get_mount_parent_path()</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Just check parent exists, don&#39;t validate user/project dirs yet</span></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> os.path.exists(mount_base):</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>            <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f&quot;Mount base does not exist: </span><span class="sc">{</span>mount_base<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>        logger.success(<span class="ss">f&quot;Mount base verified: </span><span class="sc">{</span>mount_base<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Per-Request (in ProjectService)</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> _initialize_resources(<span class="va">self</span>):</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ... project validation ...</span></span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="va">self</span>.mount_ensure <span class="kw">and</span> <span class="kw">not</span> <span class="va">self</span>._is_test_mode():</span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Validate AND prepare mount for this user/project</span></span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a>        validate_mount_access(</span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>            user_id<span class="op">=</span><span class="va">self</span>.user_id,</span>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a>            project_id<span class="op">=</span><span class="va">self</span>.project_id,</span>
+<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a>            mount_base<span class="op">=</span>ProjectContext.get_mount_parent_path()</span>
+<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a>        )</span></code></pre></div>
+<p><strong>Benefits</strong>: - Single validation function used consistently - Creates directories if needed (idempotent) - Clear error messages for each failure point - Validates actual access permissions, not just existence</p>
+<hr />
+</section>
+<section id="issue-5-no-symlink-implementation-despite-documentation" class="level3">
+<h3>Issue 5: No Symlink Implementation Despite Documentation</h3>
+<p><strong>Severity</strong>: Low <strong>Impact</strong>: Users must understand mount architecture instead of transparent file access <strong>Location</strong>: Missing feature (documented but not implemented)</p>
+<p><strong>Problem Description</strong>: Documentation in <code>docs/system/context_mgmt.md</code> mentions “new: create sym link in the working project directory to keep file IO in code agnostic of mount_points,” but this feature is not implemented.</p>
+<p><strong>Current State</strong>: IOService directly uses mount paths:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># io_service.py:save_df_pd()</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> save_df_pd(<span class="va">self</span>, df: pd.DataFrame, name_python: <span class="bu">str</span>, dataset_id: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    context <span class="op">=</span> ProjectContext.get()</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get mount point from config</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    config_service <span class="op">=</span> ConfigService()</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    mount_point <span class="op">=</span> config_service.get(<span class="st">&#39;mount&#39;</span>, <span class="st">&#39;mount_point&#39;</span>)</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Build path: {mount_point}/{user}/{project}/data/{dataset}/{name}.parquet</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    file_path <span class="op">=</span> Path(mount_point) <span class="op">/</span> context.user_id <span class="op">/</span> context.project_id <span class="op">/</span> <span class="st">&#39;data&#39;</span> <span class="op">/</span> dataset_id <span class="op">/</span> <span class="ss">f&quot;</span><span class="sc">{</span>name_python<span class="sc">}</span><span class="ss">.parquet&quot;</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>    df.to_parquet(file_path)</span></code></pre></div>
+<p><strong>Problem</strong>: - IOService is tightly coupled to mount configuration - No abstraction layer for file storage - Hard to switch storage backends (e.g., direct GCS, S3, local files)</p>
+<p><strong>Recommendation: Implement Symlink Strategy</strong></p>
+<p><strong>Step 1: Add symlink creation to ProjectContext.set()</strong></p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># env_config.py:ProjectContext.set()</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> <span class="bu">set</span>(</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    user_id: <span class="bu">str</span>,</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    project_id: <span class="bu">str</span>,</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    target_dir: <span class="bu">str</span> <span class="op">=</span> <span class="va">None</span>,</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>    write_config: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># ... existing code to determine working_dir ...</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Store in ContextVar</span></span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a>    _project_context.<span class="bu">set</span>(context)</span>
+<span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>    <span class="co"># NEW: Create data symlink if mount is configured</span></span>
+<span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> write_config:</span>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>        ProjectContext.write_config()</span>
+<span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>        ProjectContext._setup_data_symlink()  <span class="co"># ← New method</span></span>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> working_dir</span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a><span class="at">@staticmethod</span></span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> _setup_data_symlink():</span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Create symlink &#39;data&#39; in working_dir pointing to mount location.&quot;&quot;&quot;</span></span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>    context <span class="op">=</span> ProjectContext.get()</span>
+<span id="cb21-25"><a href="#cb21-25" aria-hidden="true" tabindex="-1"></a>    working_dir <span class="op">=</span> Path(context.working_dir)</span>
+<span id="cb21-26"><a href="#cb21-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-27"><a href="#cb21-27" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get mount configuration</span></span>
+<span id="cb21-28"><a href="#cb21-28" aria-hidden="true" tabindex="-1"></a>    config_service <span class="op">=</span> ConfigService(working_dir<span class="op">=</span><span class="bu">str</span>(working_dir))</span>
+<span id="cb21-29"><a href="#cb21-29" aria-hidden="true" tabindex="-1"></a>    mount_point <span class="op">=</span> config_service.get(<span class="st">&#39;mount&#39;</span>, <span class="st">&#39;mount_point&#39;</span>)</span>
+<span id="cb21-30"><a href="#cb21-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-31"><a href="#cb21-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> mount_point:</span>
+<span id="cb21-32"><a href="#cb21-32" aria-hidden="true" tabindex="-1"></a>        logger.debug(<span class="st">&quot;No mount point configured, skipping symlink creation&quot;</span>)</span>
+<span id="cb21-33"><a href="#cb21-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb21-34"><a href="#cb21-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-35"><a href="#cb21-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Build mount path: {mount_point}/{user}/{project}/data</span></span>
+<span id="cb21-36"><a href="#cb21-36" aria-hidden="true" tabindex="-1"></a>    mount_data_path <span class="op">=</span> Path(mount_point) <span class="op">/</span> context.user_id <span class="op">/</span> context.project_id <span class="op">/</span> <span class="st">&#39;data&#39;</span></span>
+<span id="cb21-37"><a href="#cb21-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-38"><a href="#cb21-38" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create symlink in working_dir</span></span>
+<span id="cb21-39"><a href="#cb21-39" aria-hidden="true" tabindex="-1"></a>    symlink <span class="op">=</span> working_dir <span class="op">/</span> <span class="st">&#39;data&#39;</span></span>
+<span id="cb21-40"><a href="#cb21-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-41"><a href="#cb21-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> symlink.exists() <span class="kw">or</span> symlink.is_symlink():</span>
+<span id="cb21-42"><a href="#cb21-42" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Check if symlink points to correct location</span></span>
+<span id="cb21-43"><a href="#cb21-43" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> symlink.is_symlink() <span class="kw">and</span> symlink.resolve() <span class="op">==</span> mount_data_path.resolve():</span>
+<span id="cb21-44"><a href="#cb21-44" aria-hidden="true" tabindex="-1"></a>            logger.debug(<span class="ss">f&quot;Data symlink already correct: </span><span class="sc">{</span>symlink<span class="sc">}</span><span class="ss"> -&gt; </span><span class="sc">{</span>mount_data_path<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb21-45"><a href="#cb21-45" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb21-46"><a href="#cb21-46" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb21-47"><a href="#cb21-47" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Remove incorrect symlink</span></span>
+<span id="cb21-48"><a href="#cb21-48" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> symlink.is_symlink():</span>
+<span id="cb21-49"><a href="#cb21-49" aria-hidden="true" tabindex="-1"></a>                symlink.unlink()</span>
+<span id="cb21-50"><a href="#cb21-50" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:</span>
+<span id="cb21-51"><a href="#cb21-51" aria-hidden="true" tabindex="-1"></a>                logger.warning(<span class="ss">f&quot;&#39;data&#39; exists as regular directory, not removing: </span><span class="sc">{</span>symlink<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb21-52"><a href="#cb21-52" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span></span>
+<span id="cb21-53"><a href="#cb21-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-54"><a href="#cb21-54" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create symlink</span></span>
+<span id="cb21-55"><a href="#cb21-55" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb21-56"><a href="#cb21-56" aria-hidden="true" tabindex="-1"></a>        symlink.symlink_to(mount_data_path, target_is_directory<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb21-57"><a href="#cb21-57" aria-hidden="true" tabindex="-1"></a>        logger.success(<span class="ss">f&quot;Created data symlink: </span><span class="sc">{</span>symlink<span class="sc">}</span><span class="ss"> -&gt; </span><span class="sc">{</span>mount_data_path<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb21-58"><a href="#cb21-58" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb21-59"><a href="#cb21-59" aria-hidden="true" tabindex="-1"></a>        logger.error(<span class="ss">f&quot;Failed to create data symlink: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb21-60"><a href="#cb21-60" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Don&#39;t raise - symlink is optional for backward compatibility</span></span></code></pre></div>
+<p><strong>Step 2: Simplify IOService to use symlink</strong></p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># io_service.py:save_df_pd()</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> save_df_pd(<span class="va">self</span>, df: pd.DataFrame, name_python: <span class="bu">str</span>, dataset_id: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    context <span class="op">=</span> ProjectContext.get()</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    working_dir <span class="op">=</span> Path(context.working_dir)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Use symlink: {working_dir}/data/{dataset}/{name}.parquet</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>    data_dir <span class="op">=</span> working_dir <span class="op">/</span> <span class="st">&#39;data&#39;</span> <span class="op">/</span> dataset_id</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    data_dir.mkdir(parents<span class="op">=</span><span class="va">True</span>, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    file_path <span class="op">=</span> data_dir <span class="op">/</span> <span class="ss">f&quot;</span><span class="sc">{</span>name_python<span class="sc">}</span><span class="ss">.parquet&quot;</span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    df.to_parquet(file_path)</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">str</span>(file_path)</span></code></pre></div>
+<p><strong>Benefits</strong>: - IOService no longer needs to know about mount configuration - File paths are relative to working_dir (cleaner, more intuitive) - Easy to switch backends (symlink can point anywhere) - Backward compatible (if symlink doesn’t exist, can fall back to mount_point)</p>
+<p><strong>Migration Path</strong>: 1. Implement symlink creation (non-breaking) 2. Update IOService to prefer symlink if exists, fallback to mount_point 3. Update tests to verify symlink creation 4. Document new behavior 5. Eventually deprecate direct mount_point usage</p>
+<hr />
+</section>
+</section>
+<section id="summary-of-recommendations" class="level2">
+<h2>3. Summary of Recommendations</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 20%" />
+<col style="width: 32%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Issue</th>
+<th>Severity</th>
+<th>Recommendation</th>
+<th>Effort</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1. Scattered Environment Detection</strong></td>
+<td>Medium</td>
+<td>Create <code>EnvironmentConfig</code> class</td>
+<td>Low</td>
+<td>High (easier to maintain/test)</td>
+</tr>
+<tr>
+<td><strong>2. Fragile Two-Phase Init</strong></td>
+<td>High</td>
+<td>Atomic initialization with rollback</td>
+<td>Medium</td>
+<td>High (prevents inconsistent state)</td>
+</tr>
+<tr>
+<td><strong>3. Confusing Mount Configuration UX</strong></td>
+<td>High</td>
+<td>Single-command setup + symlink strategy</td>
+<td>Medium</td>
+<td>Very High (major UX improvement)</td>
+</tr>
+<tr>
+<td><strong>4. Inconsistent Mount Checking</strong></td>
+<td>Medium</td>
+<td>Unified <code>validate_mount_access()</code> function</td>
+<td>Low</td>
+<td>Medium (more reliable startup)</td>
+</tr>
+<tr>
+<td><strong>5. Missing Symlink Implementation</strong></td>
+<td>Low</td>
+<td>Implement symlink in <code>ProjectContext.set()</code></td>
+<td>Low</td>
+<td>Medium (cleaner abstractions)</td>
+</tr>
+</tbody>
+</table>
+<section id="priority-order" class="level3">
+<h3>Priority Order:</h3>
+<ol type="1">
+<li><strong>Issue 3</strong> (Mount UX): Biggest user pain point, blocking adoption</li>
+<li><strong>Issue 2</strong> (Init Fragility): Causes hard-to-debug errors</li>
+<li><strong>Issue 5</strong> (Symlink): Enables fixing Issue 3 elegantly</li>
+<li><strong>Issue 1</strong> (Environment Detection): Makes other fixes cleaner</li>
+<li><strong>Issue 4</strong> (Mount Checking): Polish after other fixes</li>
+</ol>
+<hr />
+</section>
+</section>
+<section id="conclusion" class="level2">
+<h2>4. Conclusion</h2>
+<p>The OryxForge architecture demonstrates strong design principles: - ✅ Zero-parameter service pattern reduces coupling - ✅ Thread-safe context management for concurrent requests - ✅ Multi-environment support (CLI, Local API, GCP Production) - ✅ Serverless-ready with ephemeral storage handling</p>
+<p>However, the complexity of environment detection and resource initialization creates user-facing issues, particularly around mount configuration. The recommended fixes focus on:</p>
+<ol type="1">
+<li><strong>Simplification</strong>: Centralize environment logic, reduce command sequences</li>
+<li><strong>Robustness</strong>: Atomic initialization prevents partial failures</li>
+<li><strong>User Experience</strong>: Single-command setup, transparent file access via symlinks</li>
+</ol>
+<p>These changes will reduce configuration errors, improve testability, and create a more intuitive developer experience.</p>
+<hr />
+<p><strong>Next Steps</strong>: See <code>integration_test_strategy_2025.md</code> for comprehensive testing plan to validate these recommendations.</p>
+</section>
+</section>
+</body>
+</html>

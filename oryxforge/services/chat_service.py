@@ -104,7 +104,7 @@ class ChatService:
             # Build prompt based on mode
             if mode == 'explore':
                 # Use data analyst pattern
-                prompt = f"""use the data analyst instructions in @.claude/claude-data-analyst.md to respond to the user data analysis request. additional information on how to load and save tables, charts and reports are in @.claude/io-service-agent-guide.md
+                prompt = f"""use the data analyst instructions in @~/.claude/claude-data-analyst.md to respond to the user data analysis request. additional information on how to load and save tables, charts and reports are in @~/.claude/io-service-agent-guide.md
 
 user request: {message_user}"""
             else:

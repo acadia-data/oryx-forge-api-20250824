@@ -8,7 +8,7 @@ WORKDIR /app
 # This helps with Docker caching layers if requirements don't change
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
+COPY claude-instructions.md to user home drive
 # Copy the rest of your application code
 COPY . .
 

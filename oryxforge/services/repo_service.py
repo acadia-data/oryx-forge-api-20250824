@@ -86,7 +86,7 @@ class RepoService:
                 'name': repo_name,
                 'visibility': 'private',
                 'namespace_id': self._namespace_id,
-                'import_url': f'https://gitlab-ci-token:{self._get_gitlab_token()}@gitlab.com/oryx-forge/oryx-forge-template-20250923.git'
+                'import_url': f'https://gitlab-ci-token:{self._get_gitlab_token()}@gitlab.com/oryx-forge/oryx-forge-template-20251005.git'
             }
 
             logger.debug(f"Creating GitLab project: {gitlab_project_data}")
@@ -382,6 +382,6 @@ class RepoService:
             int: Namespace ID
         """
         cfg_env = os.getenv('CFG_ENV', 'prod')
-        return 115926998 if cfg_env == 'utest' else 115926811
-        # 115926998: https://gitlab.com/oryx-forge/utest-projects
-        # 115926811: https://gitlab.com/groups/oryx-forge/projects/-/edit
+        return 118927737 if cfg_env == 'utest' else 118927729
+        # 118927737: https://gitlab.com/oryx-forge/utest-projects
+        # 118927729: https://gitlab.com/oryx-forge/projects

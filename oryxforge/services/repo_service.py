@@ -385,3 +385,4 @@ class RepoService:
         return 118927737 if cfg_env == 'utest' else 118927729
         # 118927737: https://gitlab.com/oryx-forge/utest-projects
         # 118927729: https://gitlab.com/oryx-forge/projects
+        # these are owned by user: oryx-dev (dev@oryxintel.com)
